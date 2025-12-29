@@ -147,10 +147,15 @@ RF_CONFIG = {
     "min_samples_split": 10,      # Minimum samples required to split a node
     "min_samples_leaf": 5,        # Minimum samples required at leaf node
     "max_features": "sqrt",       # Number of features for best split
-    "n_jobs": -1,                 # Use all CPU cores
+    "n_jobs": -1,                 # Use all CPU cores (only used if GPU not available)
     "random_state": RANDOM_SEED,
     "verbose": 1                  # Print progress
 }
+
+# GPU settings for Random Forest
+# Set to True to use RAPIDS cuML (GPU-accelerated)
+# Set to False to use scikit-learn (CPU-only)
+USE_GPU_RF = True  # Requires: conda install -c rapidsai -c conda-forge cuml
 
 # XGBoost
 XGB_CONFIG = {

@@ -303,7 +303,7 @@ class NeuralNetworkModel(BaseModel):
 
         # Create DataLoader
         # num_workers > 0 speeds up data loading on GPU (workers load data on CPU while GPU trains)
-        num_workers = self.config.get('num_workers', 0)
+        num_workers = NN_CONFIG.get('num_workers', 0)
         dataloader = DataLoader(
             dataset,
             batch_size=self.batch_size,

@@ -32,6 +32,7 @@ from src.config import (
     PROCESSED_DATA_DIR,
     EXPERIMENTS_DIR,
     RANDOM_SEED,
+    USE_GPU_RF,
     set_seeds,
     get_experiment_dir
 )
@@ -122,7 +123,8 @@ def train_random_forest(X_train, y_train, target_name, exp_dir):
     logger.info(f"\nTraining Random Forest ({target_name})...")
 
     # Random Forest doesn't use validation set
-    model = RandomForestModel()
+    # Use GPU if configured and available
+    model = RandomForestModel(use_gpu=USE_GPU_RF)
     model.fit(X_train, y_train)
 
     # Save model

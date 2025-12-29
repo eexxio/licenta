@@ -7,20 +7,33 @@ Random Forest is an ensemble of decision trees that:
 - Is robust and easy to tune
 - Serves as a strong baseline
 
+GPU Support:
+- Set USE_GPU=True to use RAPIDS cuML (GPU-accelerated)
+- Set USE_GPU=False to use scikit-learn (CPU-only)
+
 Author: Bachelor's Thesis Project
 Date: 2026
 """
 
 import numpy as np
-from sklearn.ensemble import RandomForestRegressor
+import logging
 
 from src.models.base_model import BaseModel
 from src.config import RF_CONFIG, set_seeds
 
-import logging
-
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+# Try to import cuML for GPU support, fall back to scikit-learn
+try:
+    from cuml.ensemble import RandomForestRegressor as cuMLRandomForest
+    CUML_AVAILABLE = True
+    logger.info("cuML available - GPU acceleration enabled for Random Forest")
+except ImportError:
+    CUML_AVAILABLE = False
+    logger.info("cuML not available - falling back to CPU-based scikit-learn")
+
+from sklearn.ensemble import RandomForestRegressor as SklearnRandomForest
 
 
 class RandomForestModel(BaseModel):
@@ -50,11 +63,12 @@ class RandomForestModel(BaseModel):
         >>> top_genes = np.argsort(importance)[-30:][::-1]  # Top 30 genes
     """
 
-    def __init__(self, **kwargs):
+    def __init__(self, use_gpu=True, **kwargs):
         """
         Initialize Random Forest model.
 
         Args:
+            use_gpu: Use GPU-accelerated cuML if available (default: True)
             **kwargs: Override default hyperparameters from config.py
                      Example: RandomForestModel(n_estimators=1000)
         """
@@ -64,10 +78,30 @@ class RandomForestModel(BaseModel):
         config = RF_CONFIG.copy()
         config.update(kwargs)
 
-        # Create the scikit-learn model
-        self.model = RandomForestRegressor(**config)
+        # Determine which implementation to use
+        self.use_gpu = use_gpu and CUML_AVAILABLE
 
-        logger.info(f"Created Random Forest with {config['n_estimators']} trees")
+        if self.use_gpu:
+            # cuML GPU implementation
+            # Remove scikit-learn specific params that cuML doesn't support
+            cuml_config = {
+                'n_estimators': config['n_estimators'],
+                'max_depth': config['max_depth'],
+                'min_samples_split': config['min_samples_split'],
+                'min_samples_leaf': config['min_samples_leaf'],
+                'max_features': config['max_features'],
+                'random_state': config['random_state'],
+                # cuML uses different verbosity
+                'verbose': config.get('verbose', 1)
+            }
+            self.model = cuMLRandomForest(**cuml_config)
+            logger.info(f"Created GPU-accelerated Random Forest with {config['n_estimators']} trees")
+        else:
+            # scikit-learn CPU implementation
+            self.model = SklearnRandomForest(**config)
+            logger.info(f"Created CPU-based Random Forest with {config['n_estimators']} trees")
+            if use_gpu and not CUML_AVAILABLE:
+                logger.warning("GPU requested but cuML not available. Install with: conda install -c rapidsai -c conda-forge cuml")
 
     def fit(
         self,
@@ -141,6 +175,15 @@ class RandomForestModel(BaseModel):
         # Predict (parallelized across trees)
         predictions = self.model.predict(X)
 
+        # cuML returns predictions as cupy arrays, convert to numpy
+        if self.use_gpu:
+            try:
+                import cupy as cp
+                if isinstance(predictions, cp.ndarray):
+                    predictions = cp.asnumpy(predictions)
+            except ImportError:
+                pass
+
         return predictions
 
     def get_feature_importance(self) -> np.ndarray:
@@ -178,7 +221,18 @@ class RandomForestModel(BaseModel):
         if not self.is_fitted:
             raise ValueError("Model must be fitted before getting feature importance!")
 
-        return self.model.feature_importances_
+        importances = self.model.feature_importances_
+
+        # cuML returns importances as cupy arrays, convert to numpy
+        if self.use_gpu:
+            try:
+                import cupy as cp
+                if isinstance(importances, cp.ndarray):
+                    importances = cp.asnumpy(importances)
+            except ImportError:
+                pass
+
+        return importances
 
     def get_tree_predictions(self, X: np.ndarray) -> np.ndarray:
         """

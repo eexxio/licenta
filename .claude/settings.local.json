@@ -1,0 +1,21 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(tree:*)",
+      "Bash(cat:*)",
+      "Bash(awk:*)",
+      "Bash(python:*)",
+      "WebFetch(domain:www.cancerrxgene.org)",
+      "Bash(tee:*)",
+      "Bash(tasklist:*)",
+      "Bash(findstr:*)",
+      "Bash(timeout 15 powershell:*)",
+      "Bash(timeout 30 powershell:*)",
+      "Bash(del preprocessing_log.txt)",
+      "Bash(timeout 50 powershell:*)",
+      "Bash(timeout 65 powershell:*)",
+      "Bash(dir:*)",
+      "Bash(grep:*)"
+    ]
+  }
+}

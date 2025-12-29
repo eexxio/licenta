@@ -1,0 +1,270 @@
+\chapter{Date și Preprocesare}
+\label{cap:date}
+
+Acest capitol prezintă datasetul utilizat în lucrare, analiza exploratorie a datelor și pipeline-ul de preprocesare implementat pentru a pregăti datele pentru antrenarea modelelor de machine learning.
+
+\section{Datasetul GDSC}
+\label{sec:gdsc}
+
+Genomics of Drug Sensitivity in Cancer (GDSC) \cite{yang2013genomics} este una dintre cele mai cuprinzătoare baze de date publice pentru studiul răspunsului la medicamente în cancer. Datasetul GDSC1 utilizat în această lucrare conține date de expresie genică și răspuns la medicamente pentru peste 1,000 de linii celulare canceroase și 265 de compuși anticancer.
+
+\subsection{Structura Datasetului}
+\label{subsec:structura_dataset}
+
+Datasetul GDSC este format din următoarele componente principale:
+
+\begin{itemize}
+    \item \textbf{Expresie genică}: Profiluri de expresie pentru 17,419 gene, măsurate prin microarrays Affymetrix și normalizate prin metoda RMA (Robust Multi-array Average). Fiecare linie celulară este caracterizată printr-un vector de expresie genică de dimensiune 17,419.
+
+    \item \textbf{Răspuns la medicamente}: Valorile IC50 (concentrația care inhibă 50\% din creșterea celulară) și AUC (aria sub curba doză-răspuns) pentru fiecare pereche linie celulară-medicament. Aceste metrici măsoară sensibilitatea liniilor celulare la diferite compuși anticancer.
+
+    \item \textbf{Metadate}: Informații despre tipul de cancer, țesutul de origine, mutații genetice și alte caracteristici ale liniilor celulare.
+\end{itemize}
+
+Tabelul \ref{tab:dataset_stats} prezintă statisticile principale ale datasetului GDSC1.
+
+\begin{table}[h]
+\centering
+\caption{Statistici descriptive ale datasetului GDSC1}
+\label{tab:dataset_stats}
+\begin{tabular}{lr}
+\toprule
+\textbf{Caracteristică} & \textbf{Valoare} \\
+\midrule
+Număr linii celulare & 1,001 \\
+Număr gene măsurate & 17,419 \\
+Număr medicamente testate & 265 \\
+Total măsurători (perechi linie-medicament) & $\sim$200,000 \\
+Tipuri de cancer reprezentate & 30+ \\
+Metrici de răspuns & IC50, AUC \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{Metrici de Răspuns la Medicamente}
+\label{subsec:metrici_raspuns}
+
+În cadrul acestei lucrări sunt utilizate două metrici complementare pentru a caracteriza răspunsul la medicamente:
+
+\begin{itemize}
+    \item \textbf{IC50 (Half-maximal Inhibitory Concentration)}: Concentrația de medicament necesară pentru a inhiba 50\% din creșterea celulară. Valori mai mici ale IC50 indică o sensibilitate mai mare la medicament. În GDSC, IC50 este măsurat în scala logaritmică naturală (LN\_IC50) pentru a reduce asimetria distribuției și a stabiliza varianța.
+
+    \item \textbf{AUC (Area Under the Curve)}: Aria sub curba doză-răspuns, normalizată între 0 și 1. Valori mai mici ale AUC indică o sensibilitate mai mare (curba doză-răspuns este deplasată spre stânga). AUC este considerat o metrică mai robustă decât IC50 deoarece ia în considerare întreaga curbă doză-răspuns, nu doar un singur punct.
+\end{itemize}
+
+Figura \ref{fig:ic50_dist} și Figura \ref{fig:auc_dist} prezintă distribuțiile valorilor IC50 și AUC în setul de antrenare.
+
+\begin{figure}[h]
+\centering
+\includegraphics[width=0.8\textwidth]{results/figures/ch2_fig1_ic50_distribution.png}
+\caption{Distribuția valorilor IC50 (scala logaritmică) în setul de antrenare}
+\label{fig:ic50_dist}
+\end{figure}
+
+\begin{figure}[h]
+\centering
+\includegraphics[width=0.8\textwidth]{results/figures/ch2_fig2_auc_distribution.png}
+\caption{Distribuția valorilor AUC în setul de antrenare}
+\label{fig:auc_dist}
+\end{figure}
+
+\section{Analiza Exploratorie a Datelor}
+\label{sec:eda}
+
+Înainte de a construi modelele de predicție, am efectuat o analiză exploratorie detaliată pentru a înțelege caracteristicile datasetului și pentru a identifica potențiale probleme.
+
+\subsection{Distribuția Sample-urilor per Medicament}
+\label{subsec:samples_per_drug}
+
+Nu toate medicamentele au fost testate pe toate liniile celulare. Figura \ref{fig:samples_per_drug} prezintă numărul de sample-uri disponibile pentru top 20 medicamente după numărul de măsurători.
+
+\begin{figure}[h]
+\centering
+\includegraphics[width=0.9\textwidth]{results/figures/ch2_fig3_samples_per_drug.png}
+\caption{Numărul de sample-uri disponibile pentru top 20 medicamente}
+\label{fig:samples_per_drug}
+\end{figure}
+
+Observăm o mare variabilitate în numărul de măsurători per medicament. Unele medicamente au fost testate pe peste 900 de linii celulare, în timp ce altele au fost testate pe mai puțin de 100. Pentru a asigura antrenarea robustă a modelelor, am filtrat medicamentele cu mai puțin de 30 de măsurători (vezi Secțiunea \ref{sec:preprocesare}).
+
+\subsection{Diversitatea Tipurilor de Cancer}
+\label{subsec:cancer_types}
+
+Datasetul GDSC acoperă o gamă largă de tipuri de cancer, incluzând:
+\begin{itemize}
+    \item Cancer pulmonar (lung)
+    \item Cancer colorectal
+    \item Cancer de sân (breast)
+    \item Leucemie
+    \item Melanom
+    \item Cancer ovarian
+    \item Glioblastom
+    \item și peste 20 de alte tipuri
+\end{itemize}
+
+Această diversitate permite modelelor să învețe pattern-uri generale de răspuns la medicamente care nu sunt specifice unui singur tip de cancer.
+
+\section{Pipeline de Preprocesare}
+\label{sec:preprocesare}
+
+Pentru a pregăti datele pentru antrenarea modelelor de machine learning, am implementat un pipeline complet de preprocesare care constă din următoarele etape:
+
+\subsection{Îmbinarea Datelor}
+\label{subsec:merge}
+
+Prima etapă constă în îmbinarea datelor de expresie genică cu datele de răspuns la medicamente. Fiecare sample din dataset final reprezintă o pereche (linie celulară, medicament) și conține:
+\begin{itemize}
+    \item Vector de expresie genică (17,419 valori)
+    \item ID-ul medicamentului
+    \item Valori țintă: LN\_IC50 și AUC
+\end{itemize}
+
+\subsection{Filtrarea Medicamentelor}
+\label{subsec:filter_drugs}
+
+Pentru a asigura că fiecare medicament are suficiente date pentru antrenare, am păstrat doar medicamentele care au cel puțin 30 de măsurători. Acest prag a fost ales pentru a balansa:
+\begin{itemize}
+    \item \textbf{Diversitatea}: Păstrarea unui număr mare de medicamente
+    \item \textbf{Robustețea}: Asigurarea că fiecare medicament are suficiente sample-uri pentru estimări fiabile
+\end{itemize}
+
+După filtrare, au rămas aproximativ 200 de medicamente în dataset.
+
+\subsection{Tratarea Valorilor Lipsă}
+\label{subsec:missing_values}
+
+Valorile lipsă din datele de expresie genică au fost imputate folosind mediana valorilor genei respective. Liniile cu valori lipsă pentru IC50 sau AUC au fost eliminate din dataset, deoarece acestea reprezintă variabilele țintă.
+
+\subsection{Selecția Genelor}
+\label{subsec:gene_selection}
+
+Utilizarea tuturor celor 17,419 gene ca features ar duce la \textit{curse of dimensionality} (blestemul dimensionalității), unde numărul mare de features comparativ cu numărul de sample-uri poate cauza overfitting.
+
+Pentru a reduce dimensionalitatea, am selectat top 5,000 de gene cu cea mai mare varianță în expresie. Raționamentul este că genele cu varianță mare sunt mai informative pentru predicție decât genele cu expresie constantă.
+
+Algoritmul de selecție:
+\begin{enumerate}
+    \item Calcularea varianței pentru fiecare genă: $\text{Var}(g) = \frac{1}{N} \sum_{i=1}^{N} (x_{ig} - \bar{x}_g)^2$
+    \item Sortarea genelor descrescător după varianță
+    \item Selectarea top 5,000 gene
+\end{enumerate}
+
+Această reducere păstrează genele cel mai probabil să fie relevante pentru predicția răspunsului la medicamente, reducând în același timp riscul de overfitting.
+
+\subsection{Normalizarea Expresiei Genice}
+\label{subsec:normalizare}
+
+Pentru a asigura că toate genele au o contribuție echilibrată la model, am aplicat normalizare Z-score pe fiecare genă:
+
+\begin{equation}
+x'_{ig} = \frac{x_{ig} - \mu_g}{\sigma_g}
+\end{equation}
+
+unde:
+\begin{itemize}
+    \item $x_{ig}$ = expresia genei $g$ în sample-ul $i$
+    \item $\mu_g$ = media expresiei genei $g$ în setul de antrenare
+    \item $\sigma_g$ = deviația standard a expresiei genei $g$ în setul de antrenare
+\end{itemize}
+
+\textbf{Important}: Parametrii de normalizare ($\mu_g$, $\sigma_g$) sunt calculați \textit{doar pe setul de antrenare} și apoi aplicați setului de test. Acest lucru previne \textit{data leakage} și asigură o evaluare corectă a performanței.
+
+\subsection{Encodarea Medicamentelor}
+\label{subsec:drug_encoding}
+
+Medicamentele au fost encodate folosind două strategii, în funcție de modelul utilizat:
+
+\begin{itemize}
+    \item \textbf{Index encoding}: Fiecare medicament primește un index unic (0, 1, 2, ..., 199). Această reprezentare este utilizată pentru rețelele neuronale, care învață embeddings dense pentru fiecare medicament.
+
+    \item \textbf{One-hot encoding}: Fiecare medicament este reprezentat ca un vector binar de dimensiune 200, cu o singură valoare 1 și restul 0. Această reprezentare este utilizată pentru Random Forest și XGBoost.
+\end{itemize}
+
+\subsection{Pregătirea Features și Targets}
+\label{subsec:features_targets}
+
+După toate transformările anterioare, fiecare sample este reprezentat printr-un vector de features de forma:
+
+\begin{equation}
+\mathbf{x}_i = [\text{gene}_1, \text{gene}_2, ..., \text{gene}_{5000}, \text{drug\_encoding}]
+\end{equation}
+
+Avem două variabile țintă separate:
+\begin{itemize}
+    \item $\mathbf{y}_{\text{IC50}} \in \mathbb{R}^N$ - valorile LN\_IC50
+    \item $\mathbf{y}_{\text{AUC}} \in \mathbb{R}^N$ - valorile AUC
+\end{itemize}
+
+Astfel, antrenăm modele separate pentru predicția IC50 și AUC, rezultând în total 6 modele:
+\begin{itemize}
+    \item Random Forest × \{IC50, AUC\} = 2 modele
+    \item XGBoost × \{IC50, AUC\} = 2 modele
+    \item Rețea Neuronală × \{IC50, AUC\} = 2 modele
+\end{itemize}
+
+\section{Împărțirea Datelor}
+\label{sec:split}
+
+O componentă critică a acestei lucrări este modul de împărțire a datelor în seturi de antrenare și testare.
+
+\subsection{Strategia Split by Cell Line}
+\label{subsec:split_strategy}
+
+\textbf{Problema data leakage}: Dacă am face o împărțire aleatorie a sample-urilor, aceeași linie celulară ar putea apărea atât în setul de antrenare cât și în setul de test (cu medicamente diferite). Aceasta ar duce la \textit{data leakage}, deoarece modelul ar învăța profilul molecular al liniei celulare în timpul antrenării și apoi ar trebui să prezică răspunsul aceleiași linii la un medicament diferit în timpul testării. Această configurație ar produce performanțe artificial ridicate care nu reflectă capacitatea reală de generalizare a modelului.
+
+\textbf{Soluția noastră}: Împărțirea \textit{by cell line} (după linia celulară) asigură că nicio linie celulară nu apare simultan în setul de antrenare și în setul de test. Modelul trebuie să generalizeze la linii celulare complet noi, având doar informațiile despre expresia lor genică.
+
+Algoritmul de împărțire:
+\begin{enumerate}
+    \item Identificarea tuturor liniilor celulare unice din dataset
+    \item Împărțirea aleatorie a liniilor celulare în 80\% antrenare / 20\% testare
+    \item Asignarea tuturor sample-urilor cu linii din primul grup la setul de antrenare
+    \item Asignarea tuturor sample-urilor cu linii din al doilea grup la setul de test
+    \item Verificarea că nu există overlap între cele două seturi
+\end{enumerate}
+
+\subsection{Statistici Split}
+\label{subsec:split_stats}
+
+După aplicarea split-ului, datasetul final are următoarea structură:
+
+\begin{table}[h]
+\centering
+\caption{Statistici seturi de antrenare și testare}
+\label{tab:split_stats}
+\begin{tabular}{lrr}
+\toprule
+\textbf{Caracteristică} & \textbf{Antrenare (80\%)} & \textbf{Testare (20\%)} \\
+\midrule
+Număr sample-uri & $\sim$160,000 & $\sim$40,000 \\
+Număr linii celulare & $\sim$800 & $\sim$200 \\
+Număr medicamente & 200 & 200 \\
+Număr features (după selecție) & 5,001 & 5,001 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{Cross-Validation}
+\label{subsec:cross_validation}
+
+Pentru tuning-ul hiperparametrilor, am folosit 5-fold cross-validation, de asemenea \textit{by cell line}. Fiecare fold conține linii celulare disjuncte, menținând aceeași strategie de preveni data leakage.
+
+\section{Rezumat}
+\label{sec:rezumat_data}
+
+În acest capitol am prezentat:
+
+\begin{itemize}
+    \item \textbf{Datasetul GDSC1}: 1,001 linii celulare, 17,419 gene, 265 medicamente
+    \item \textbf{Metrici de răspuns}: IC50 și AUC ca variabile țintă
+    \item \textbf{Pipeline de preprocesare}:
+    \begin{itemize}
+        \item Filtrarea medicamentelor (≥30 sample-uri)
+        \item Selecția top 5,000 gene după varianță
+        \item Normalizare Z-score
+        \item Encodarea medicamentelor
+    \end{itemize}
+    \item \textbf{Split by cell line}: Prevenirea data leakage prin separarea completă a liniilor celulare între antrenare și testare
+\end{itemize}
+
+Aceste date preprocesate formează baza pentru construirea și evaluarea modelelor de machine learning descrise în capitolele următoare.

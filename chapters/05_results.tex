@@ -1,0 +1,333 @@
+\chapter{Rezultate}
+\label{cap:rezultate}
+
+Acest capitol prezintă rezultatele experimentale obținute prin antrenarea și evaluarea celor șase modele de machine learning (Random Forest, XGBoost și Rețea Neuronală, fiecare pentru IC50 și AUC).
+
+\section{Performanța Generală a Modelelor}
+\label{sec:performanta_generala}
+
+\subsection{Metrici Comparative}
+\label{subsec:metrici_comparative}
+
+Tabelul \ref{tab:overall_performance} prezintă performanța tuturor modelelor pe setul de test, evaluată prin cinci metrici complementare.
+
+\begin{table}[h]
+\centering
+\caption{Performanța generală a modelelor pe setul de test}
+\label{tab:overall_performance}
+\begin{tabular}{llrrrrr}
+\toprule
+\textbf{Model} & \textbf{Target} & \textbf{R²} & \textbf{RMSE} & \textbf{MAE} & \textbf{Spearman} & \textbf{Pearson} \\
+\midrule
+Random Forest & IC50 & [FILL] & [FILL] & [FILL] & [FILL] & [FILL] \\
+Random Forest & AUC & [FILL] & [FILL] & [FILL] & [FILL] & [FILL] \\
+XGBoost & IC50 & [FILL] & [FILL] & [FILL] & [FILL] & [FILL] \\
+XGBoost & AUC & [FILL] & [FILL] & [FILL] & [FILL] & [FILL] \\
+Neural Network & IC50 & [FILL] & [FILL] & [FILL] & [FILL] & [FILL] \\
+Neural Network & AUC & [FILL] & [FILL] & [FILL] & [FILL] & [FILL] \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\textbf{Observații principale}:
+
+\begin{itemize}
+    \item \textbf{Cel mai bun model pentru AUC}: [FILL - probabil XGBoost] cu R² = [FILL]
+    \item \textbf{Cel mai bun model pentru IC50}: [FILL] cu R² = [FILL]
+    \item \textbf{Diferența de performanță}: [FILL - discutați diferențele între modele]
+\end{itemize}
+
+\subsection{Identificarea Modelului Optim}
+\label{subsec:model_optim}
+
+Pe baza metricii R² (care măsoară proporția de varianță explicată), constatăm că:
+
+[FILL - Completați cu analiza detaliată după rularea experimentelor. De exemplu:]
+
+\begin{itemize}
+    \item Pentru predicția AUC: [Model] obține cea mai bună performanță (R² = X.XX)
+    \item Pentru predicția IC50: [Model] este optim (R² = X.XX)
+    \item Corelația Spearman confirmă rezultatele: [Model] atinge ρ = X.XX pentru AUC
+\end{itemize}
+
+\section{Comparație IC50 vs AUC}
+\label{sec:ic50_vs_auc}
+
+Figura \ref{fig:model_comparison_auc} și Figura \ref{fig:model_comparison_ic50} compară performanța modelelor pe cele două metrici țintă.
+
+\begin{figure}[h]
+\centering
+\includegraphics[width=0.95\textwidth]{results/figures/ch5_fig1_model_comparison_auc.png}
+\caption{Comparația performanței modelelor pentru predicția AUC}
+\label{fig:model_comparison_auc}
+\end{figure}
+
+\begin{figure}[h]
+\centering
+\includegraphics[width=0.95\textwidth]{results/figures/ch5_fig2_model_comparison_ic50.png}
+\caption{Comparația performanței modelelor pentru predicția IC50}
+\label{fig:model_comparison_ic50}
+\end{figure}
+
+\subsection{Analiza Diferențelor}
+\label{subsec:analiza_diferente}
+
+[FILL - După rularea experimentelor, completați cu:]
+
+\begin{itemize}
+    \item \textbf{AUC este mai ușor de prezis decât IC50}: Diferența medie în R² este de aproximativ [FILL]
+    \item \textbf{Explicație}: AUC este o metrică agregată (aria sub curbă), mai robustă la zgomot experimental decât IC50 (care depinde de un singur punct estimat prin fitting)
+    \item \textbf{Consistența între modele}: Toate trei modelele prezintă același pattern (AUC > IC50 în performanță)
+\end{itemize}
+
+\section{Predicții vs Valori Reale}
+\label{sec:predictii_vs_reale}
+
+Figurile \ref{fig:predictions_rf_auc} - \ref{fig:predictions_nn_ic50} prezintă scatter plots ale predicțiilor modelelor față de valorile reale pe setul de test.
+
+\begin{figure}[h]
+\centering
+\includegraphics[width=0.7\textwidth]{results/figures/ch5_fig3_predictions_randomforest_auc.png}
+\caption{Predicții Random Forest pentru AUC (R² = [FILL])}
+\label{fig:predictions_rf_auc}
+\end{figure}
+
+\begin{figure}[h]
+\centering
+\includegraphics[width=0.7\textwidth]{results/figures/ch5_fig3_predictions_xgboost_auc.png}
+\caption{Predicții XGBoost pentru AUC (R² = [FILL])}
+\label{fig:predictions_xgb_auc}
+\end{figure}
+
+\begin{figure}[h]
+\centering
+\includegraphics[width=0.7\textwidth]{results/figures/ch5_fig3_predictions_neuralnetwork_auc.png}
+\caption{Predicții Rețea Neuronală pentru AUC (R² = [FILL])}
+\label{fig:predictions_nn_auc}
+\end{figure}
+
+[NOTE: Include similar figures for IC50]
+\begin{figure}[h]
+\centering
+\includegraphics[width=0.7\textwidth]{results/figures/ch5_fig3_predictions_randomforest_ic50.png}
+\caption{Predicții Random Forest pentru IC50 (R² = [FILL])}
+\label{fig:predictions_rf_ic50}
+\end{figure}
+
+\begin{figure}[h]
+\centering
+\includegraphics[width=0.7\textwidth]{results/figures/ch5_fig3_predictions_xgboost_ic50.png}
+\caption{Predicții XGBoost pentru IC50 (R² = [FILL])}
+\label{fig:predictions_xgb_ic50}
+\end{figure}
+
+\begin{figure}[h]
+\centering
+\includegraphics[width=0.7\textwidth]{results/figures/ch5_fig3_predictions_neuralnetwork_ic50.png}
+\caption{Predicții Rețea Neuronală pentru IC50 (R² = [FILL])}
+\label{fig:predictions_nn_ic50}
+\end{figure}
+
+\subsection{Pattern-uri Observate}
+\label{subsec:pattern_observate}
+
+[FILL - Analizați graficele după generare:]
+
+\begin{itemize}
+    \item \textbf{Concentrarea în jurul diagonalei}: Punctele aproape de linia roșie (predicție perfectă) indică predicții bune
+    \item \textbf{Outliers}: [FILL - identificați și discutați outliers extreme]
+    \item \textbf{Heteroscedasticitate}: [FILL - eroarea este constantă sau variază cu magnitudinea valorii?]
+    \item \textbf{Bias sistematic}: [FILL - modelele subestimează sau supraestimează sistematic?]
+\end{itemize}
+
+\section{Analiză Per Medicament}
+\label{sec:per_medicament}
+
+Nu toate medicamentele sunt la fel de ușor de prezis. Tabelul \ref{tab:per_drug_best} și Tabelul \ref{tab:per_drug_worst} prezintă medicamentele cu cea mai bună și cea mai slabă performanță de predicție (folosind XGBoost pe AUC ca exemplu reprezentativ).
+
+\begin{table}[h]
+\centering
+\caption{Top 10 medicamente cel mai bine prezise (XGBoost, AUC)}
+\label{tab:per_drug_best}
+\begin{tabular}{lrrrr}
+\toprule
+\textbf{Drug ID} & \textbf{Drug Name} & \textbf{N Samples} & \textbf{R²} & \textbf{Spearman} \\
+\midrule
+[FILL] & [FILL] & [FILL] & [FILL] & [FILL] \\
+[FILL] & [FILL] & [FILL] & [FILL] & [FILL] \\
+... & ... & ... & ... & ... \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{table}[h]
+\centering
+\caption{Top 10 medicamente cel mai greu de prezis (XGBoost, AUC)}
+\label{tab:per_drug_worst}
+\begin{tabular}{lrrrr}
+\toprule
+\textbf{Drug ID} & \textbf{Drug Name} & \textbf{N Samples} & \textbf{R²} & \textbf{Spearman} \\
+\midrule
+[FILL] & [FILL] & [FILL] & [FILL] & [FILL] \\
+[FILL] & [FILL] & [FILL] & [FILL] & [FILL] \\
+... & ... & ... & ... & ... \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{figure}[h]
+\centering
+\includegraphics[width=0.9\textwidth]{results/figures/ch5_fig4_per_drug_xgboost_auc.png}
+\caption{Performanța per medicament (XGBoost, AUC) - Top/Bottom 20}
+\label{fig:per_drug_performance}
+\end{figure}
+
+\subsection{Factori Care Influențează Predictibilitatea}
+\label{subsec:factori_predictibilitate}
+
+[FILL - După analiză, discutați:]
+
+\begin{itemize}
+    \item \textbf{Dimensiunea sample-ului}: Medicamente cu mai multe măsurători tind să fie mai bine prezise?
+    \item \textbf{Clasa terapeutică}: Anumite clase de medicamente (kinase inhibitors, chemotherapy, etc.) sunt mai predictibile?
+    \item \textbf{Specificitatea mecanismului}: Medicamente cu target molecular bine-definit vs medicamente cu mecanism complex?
+    \item \textbf{Distribuția răspunsului}: Medicamente cu răspuns heterogen (mare varianță) sunt mai greu de prezis?
+\end{itemize}
+
+\section{Importanța Genelor}
+\label{sec:importanta_gene}
+
+Random Forest și XGBoost furnizează scoruri de importanță pentru fiecare genă, indicând contribuția lor la predicții.
+
+\begin{table}[h]
+\centering
+\caption{Top 30 gene importante pentru predicția răspunsului (XGBoost, AUC)}
+\label{tab:top_genes}
+\begin{tabular}{llrrl}
+\toprule
+\textbf{Rank} & \textbf{Gene} & \textbf{Importance} & \textbf{Known Cancer Gene?} & \textbf{Function} \\
+\midrule
+1 & [FILL] & [FILL] & [Yes/No] & [Brief description] \\
+2 & [FILL] & [FILL] & [Yes/No] & [Brief description] \\
+3 & [FILL] & [FILL] & [Yes/No] & [Brief description] \\
+... & ... & ... & ... & ... \\
+30 & [FILL] & [FILL] & [Yes/No] & [Brief description] \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{figure}[h]
+\centering
+\includegraphics[width=0.85\textwidth]{results/figures/ch5_fig5_importance_randomforest_auc.png}
+\caption{Top 30 gene importante - Random Forest (AUC)}
+\label{fig:importance_rf}
+\end{figure}
+
+\begin{figure}[h]
+\centering
+\includegraphics[width=0.85\textwidth]{results/figures/ch5_fig5_importance_xgboost_auc.png}
+\caption{Top 30 gene importante - XGBoost (AUC)}
+\label{fig:importance_xgb}
+\end{figure}
+
+\subsection{Interpretare Biologică}
+\label{subsec:interpretare_biologica}
+
+[FILL - După identificarea genelor, căutați informații biologice:]
+
+\begin{itemize}
+    \item \textbf{Gene cunoscute în cancer}: [Ex: TP53, KRAS, MYC] apar în top? Aceasta validează modelul
+    \item \textbf{Căi de semnalizare}: Genele importante sunt îmbogățite în anumite pathways? (ex: apoptosis, cell cycle, DNA repair)
+    \item \textbf{Consistența RF vs XGBoost}: Cât de mult se suprapun top 30 genele? Suprapunerea mare → gene cu adevărat importante
+    \item \textbf{Descoperiri potențiale}: Gene importante dar puțin studiate → candidați pentru cercetare viitoare
+\end{itemize}
+
+\subsection{Validare Cross-Model}
+\label{subsec:validare_cross_model}
+
+Pentru a identifica genele cu adevărat importante (nu artefacte ale unui model specific), comparăm importanța între Random Forest și XGBoost:
+
+[FILL - După analiză:]
+
+\begin{itemize}
+    \item \textbf{Suprapunere top 30}: [FILL]\ gene apar în top 30 pentru ambele modele
+    \item \textbf{Corelația scorurilor}: Corelația Spearman între importanțe RF și XGBoost este ρ = [FILL]
+    \item \textbf{Consensusuri puternice}: Gene cu importanță mare în ambele modele: [FILL - listați 5-10 gene]
+\end{itemize}
+
+\section{Curbe de Învățare}
+\label{sec:curbe_invatare}
+
+Pentru modelele cu early stopping (XGBoost și Rețea Neuronală), analizăm curbele de învățare pentru a înțelege convergența și identificarea overfitting-ului.
+
+\subsection{XGBoost}
+\label{subsec:learning_xgboost}
+
+\begin{figure}[h]
+\centering
+\includegraphics[width=0.8\textwidth]{results/figures/ch5_fig6_learning_xgboost_auc.png}
+\caption{Curbe de învățare XGBoost (AUC)}
+\label{fig:learning_xgb_auc}
+\end{figure}
+
+\begin{figure}[h]
+\centering
+\includegraphics[width=0.8\textwidth]{results/figures/ch5_fig6_learning_xgboost_ic50.png}
+\caption{Curbe de învățare XGBoost (IC50)}
+\label{fig:learning_xgb_ic50}
+\end{figure}
+
+[FILL - Analizați graficele:]
+
+\begin{itemize}
+    \item \textbf{Convergență}: După câte iterații se stabilizează loss-ul de validare?
+    \item \textbf{Overfitting}: Există gap mare între train și validare? Dacă da, early stopping a prevenit problema
+    \item \textbf{Stabilitate}: Loss-ul de validare oscilează mult sau este stabil?
+\end{itemize}
+
+\subsection{Rețea Neuronală}
+\label{subsec:learning_nn}
+
+\begin{figure}[h]
+\centering
+\includegraphics[width=0.8\textwidth]{results/figures/ch5_fig6_learning_neuralnetwork_auc.png}
+\caption{Curbe de învățare Rețea Neuronală (AUC)}
+\label{fig:learning_nn_auc}
+\end{figure}
+
+\begin{figure}[h]
+\centering
+\includegraphics[width=0.8\textwidth]{results/figures/ch5_fig6_learning_neuralnetwork_ic50.png}
+\caption{Curbe de învățare Rețea Neuronală (IC50)}
+\label{fig:learning_nn_ic50}
+\end{figure}
+
+[FILL - Analizați:]
+
+\begin{itemize}
+    \item \textbf{Epoci necesare}: Câte epoci până la early stopping? (așteptat: 50-150)
+    \item \textbf{Scăderea learning rate}: Learning rate scheduler a redus LR? Când?
+    \item \textbf{Overfitting}: Gap train-validare? Dropout-ul a fost suficient?
+    \item \textbf{Converență smooth}: Loss-ul scade monoton sau are salturi?
+\end{itemize}
+
+\section{Rezumat}
+\label{sec:rezumat_rezultate}
+
+Rezultatele experimentale demonstrează că:
+
+\begin{enumerate}
+    \item \textbf{Modelele ML pot prezice răspunsul la medicamente} cu acuratețe moderată până la bună (R² \approx [FILL] pentru AUC)
+
+    \item \textbf{[Model cel mai bun] obține cea mai bună performanță}: R² = [FILL] pentru AUC, R² = [FILL] pentru IC50
+
+    \item \textbf{AUC este mai predictibil decât IC50}: Diferență medie în R² de aproximativ [FILL]
+
+    \item \textbf{Performanța variază între medicamente}: R² per medicament variază de la [MIN] la [MAX], sugerând că unele medicamente sunt mai ușor de prezis
+
+    \item \textbf{Gene importante identificate}: Top 30 gene includ [FILL] gene cunoscute în cancer, validând abordarea, plus [FILL] gene mai puțin studiate pentru cercetare viitoare
+
+    \item \textbf{Modele bine antrenate fără overfitting}: Curbele de învățare arată convergență bună și early stopping eficient
+\end{enumerate}
+
+Aceste rezultate confirmă că machine learning este o abordare promițătoare pentru predicția răspunsului la medicamente din date genomice și oferă fundația pentru medicina personalizată în tratamentul cancerului.

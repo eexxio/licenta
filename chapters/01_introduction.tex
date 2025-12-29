@@ -1,0 +1,266 @@
+\chapter{Introducere}
+\label{cap:introducere}
+
+\section{Context și Motivație}
+\label{sec:context}
+
+Cancerul reprezintă una dintre principalele cauze de deces la nivel global, cu peste 10 milioane de decese anual conform Organizației Mondiale a Sănătății. Tratamentul cancerului se bazează pe mai multe modalități: chirurgie, radioterapie și chimioterapie. Chimioterapia, în special, utilizează medicamente anticancer pentru a distruge celulele tumorale sau a încetini creșterea lor.
+
+\subsection{Problema Heterogenității Răspunsului}
+\label{subsec:heterogenitate}
+
+O provocare majoră în tratamentul cancerului este \textbf{heterogenitatea răspunsului la medicamente}. Același medicament poate fi extrem de eficient pentru un pacient, dar complet ineficient pentru altul cu același tip de cancer. Acest fenomen se explică prin:
+
+\begin{itemize}
+    \item \textbf{Variabilitate genetică}: Tumori aparent similare pot avea profile moleculare complet diferite
+    \item \textbf{Mecanisme de rezistență}: Celulele canceroase dezvoltă rezistență prin mutații, amplificări genice sau modificări epigenetice
+    \item \textbf{Heterogenitate intra-tumorală}: Chiar și în cadrul aceleiași tumori, celulele pot diferi semnificativ
+\end{itemize}
+
+\subsection{Limitările Abordării Actuale}
+\label{subsec:limitari_actuale}
+
+În practica clinică actuală, alegerea medicamentului se bazează pe:
+
+\begin{enumerate}
+    \item \textbf{Tipul histologic de cancer}: Medicamente standard pentru fiecare tip (ex: cisplatin pentru cancerul pulmonar)
+    \item \textbf{Stadiul bolii}: Protocoale diferite pentru stadii timpurii vs avansate
+    \item \textbf{Markeri moleculari specifici}: HER2 pentru cancerul de sân, EGFR pentru cancerul pulmonar
+    \item \textbf{Trial and error}: Dacă un medicament eșuează, se încearcă altul
+\end{enumerate}
+
+Această abordare are dezavantaje semnificative:
+\begin{itemize}
+    \item \textbf{Timp pierdut}: Luni de tratament ineficient până la găsirea medicamentului potrivit
+    \item \textbf{Toxicitate inutilă}: Pacienții suferă efecte adverse fără beneficiu terapeutic
+    \item \textbf{Cost ridicat}: Medicamente scumpe folosite fără efect
+    \item \textbf{Progresia bolii}: Tumoarea poate avansa în timp ce se testează tratamente ineficiente
+\end{itemize}
+
+\subsection{Promisiunea Medicinii Personalizate}
+\label{subsec:medicina_personalizata}
+
+\textbf{Medicina personalizată} (sau medicina de precizie) propune o abordare alternativă: alegerea tratamentului pe baza profilului molecular individual al fiecărui pacient. Principiul fundamental este:
+
+\begin{center}
+\textit{``Medicamentul potrivit, pentru pacientul potrivit, la momentul potrivit"}
+\end{center}
+
+Avantajele potențiale includ:
+\begin{itemize}
+    \item Creșterea ratei de răspuns (mai mulți pacienți beneficiază)
+    \item Reducerea toxicității (evitarea tratamentelor inutile)
+    \item Îmbunătățirea supraviețuirii (tratament eficient mai rapid)
+    \item Optimizarea costurilor (resurse alocate eficient)
+\end{itemize}
+
+\subsection{Rolul Machine Learning}
+\label{subsec:rol_ml}
+
+Profilul molecular al unei tumori include mii de gene, proteine și mutații. Analiza manuală a acestor date complexe pentru a prezice răspunsul la medicamente este practic imposibilă pentru un om.
+
+\textbf{Machine Learning (ML)} oferă soluții pentru această problemă:
+
+\begin{itemize}
+    \item \textbf{Învățare din date}: Algoritmi ML pot descoperi pattern-uri complexe în seturi mari de date
+    \item \textbf{Predicție automată}: Odată antrenat, modelul poate prezice răspunsul pentru pacienți noi în câteva secunde
+    \item \textbf{Non-linearitate}: ML poate captura relații non-liniare între gene și răspunsul la medicamente
+    \item \textbf{Scalabilitate}: Se poate aplica pe mii de gene și sute de medicamente simultan
+\end{itemize}
+
+\section{Datasetul GDSC}
+\label{sec:gdsc_intro}
+
+Pentru a antrena modele de ML, avem nevoie de date de calitate care să conțină atât profiluri moleculare cât și răspunsul măsurat la medicamente.
+
+\textbf{Genomics of Drug Sensitivity in Cancer (GDSC)} \cite{yang2013genomics, iorio2016landscape} este unul dintre cele mai mari și mai utilizate dataset-uri publice pentru acest scop. GDSC conține:
+
+\begin{itemize}
+    \item \textbf{1,001 linii celulare canceroase}: Reprezentând peste 30 de tipuri de cancer
+    \item \textbf{17,419 gene măsurate}: Expresie genică (nivelul de activitate al fiecărei gene)
+    \item \textbf{265 de compuși anticancer}: Medicamente aprobate și experimentale
+    \item \textbf{$\sim$200,000 măsurători de răspuns}: IC50 și AUC pentru perechi (linie celulară, medicament)
+\end{itemize}
+
+Acest dataset permite antrenarea de modele \textbf{pan-drug} - modele care învață să prezică răspunsul pentru multiple medicamente simultan, beneficiind de transfer learning între medicamente similare.
+
+\section{Obiective}
+\label{sec:obiective}
+
+Obiectivul principal al acestei lucrări este:
+
+\begin{center}
+\fbox{\parbox{0.9\textwidth}{
+\textbf{Dezvoltarea și compararea de modele de machine learning pentru predicția răspunsului la medicamente oncologice pornind de la expresia genică, utilizând datasetul GDSC1.}
+}}
+\end{center}
+
+\subsection{Obiective Specifice}
+\label{subsec:obiective_specifice}
+
+\begin{enumerate}
+    \item \textbf{Implementarea unui pipeline complet de preprocesare}:
+    \begin{itemize}
+        \item Încărcarea și curățarea datelor GDSC
+        \item Selecția genelor relevante (top 5,000 după varianță)
+        \item Normalizarea expresiei genice
+        \item Împărțirea riguroasă train/test (by cell line pentru a preveni data leakage)
+    \end{itemize}
+
+    \item \textbf{Dezvoltarea de modele pan-drug pentru două metrici}:
+    \begin{itemize}
+        \item \textbf{IC50} (Half-maximal Inhibitory Concentration): Concentrația necesară pentru 50\% inhibiție
+        \item \textbf{AUC} (Area Under the Curve): Aria sub curba doză-răspuns
+    \end{itemize}
+
+    \item \textbf{Compararea sistematică a trei abordări de ML}:
+    \begin{itemize}
+        \item \textbf{Random Forest}: Ensemble de decision trees, baseline robust
+        \item \textbf{XGBoost}: Gradient boosting optimizat, state-of-the-art pentru date tabulare
+        \item \textbf{Rețele Neuronale (PyTorch)}: Deep learning cu drug embeddings
+    \end{itemize}
+
+    \item \textbf{Evaluare riguroasă pe date complet separate}:
+    \begin{itemize}
+        \item Metrici multiple: R², RMSE, MAE, corelații Spearman și Pearson
+        \item Analiză per medicament (care medicamente sunt ușor/greu de prezis)
+        \item Validarea absenței data leakage
+    \end{itemize}
+
+    \item \textbf{Identificarea genelor importante pentru răspunsul la medicamente}:
+    \begin{itemize}
+        \item Feature importance din Random Forest și XGBoost
+        \item Interpretarea biologică a genelor identificate
+        \item Consistența între modele
+    \end{itemize}
+
+    \item \textbf{Generarea de rezultate pentru documentația științifică}:
+    \begin{itemize}
+        \item Figuri publication-quality pentru teză
+        \item Tabele comparative de performanță
+        \item Analiza detaliată a rezultatelor
+    \end{itemize}
+\end{enumerate}
+
+\section{Contribuții}
+\label{sec:contributii}
+
+Această lucrare aduce următoarele contribuții:
+
+\begin{enumerate}
+    \item \textbf{Comparație sistematică a trei paradigme ML}:
+    \begin{itemize}
+        \item Random Forest (ensemble learning)
+        \item XGBoost (gradient boosting)
+        \item Rețele neuronale profunde (deep learning)
+    \end{itemize}
+    Pe același dataset și cu același protocol experimental, permitând o comparație echitabilă.
+
+    \item \textbf{Arhitectură neuronală cu drug embeddings}:
+    \begin{itemize}
+        \item În loc de one-hot encoding (reprezentare sparse), folosim embeddings dense (64-dimensionale)
+        \item Permite modelului să învețe similitudini între medicamente
+        \item Îmbunătățește generalizarea pentru medicamente cu puține date
+    \end{itemize}
+
+    \item \textbf{Evaluare riguroasă prin split by cell line}:
+    \begin{itemize}
+        \item Multe studii fac split aleatoriu → data leakage → performanță artificial ridicată
+        \item Noi împărțim după linii celulare: o linie este fie în train, fie în test
+        \item Simulează scenariul real: predicție pentru pacienți complet noi
+    \end{itemize}
+
+    \item \textbf{Implementare completă open-source}:
+    \begin{itemize}
+        \item Cod bine documentat și structurat
+        \item Reproducibil (fixed random seed, salvare configurații)
+        \item Pipeline end-to-end: de la date brute la figuri pentru teză
+    \end{itemize}
+
+    \item \textbf{Analiza feature importance pentru descoperire științifică}:
+    \begin{itemize}
+        \item Identificarea genelor predictive
+        \item Validarea cross-model (RF și XGBoost)
+        \item Potențial pentru generarea de ipoteze biologice
+    \end{itemize}
+\end{enumerate}
+
+\section{Structura Lucrării}
+\label{sec:structura}
+
+Această lucrare este organizată după cum urmează:
+
+\begin{itemize}
+    \item \textbf{Capitolul \ref{cap:date} - Date și Preprocesare}:
+    \begin{itemize}
+        \item Descrierea datasetului GDSC1
+        \item Analiza exploratorie a datelor
+        \item Pipeline-ul complet de preprocesare
+        \item Strategia de împărțire train/test
+    \end{itemize}
+
+    \item \textbf{Capitolul \ref{cap:metode} - Metode}:
+    \begin{itemize}
+        \item Formularea problemei de predicție
+        \item Random Forest: principii și hiperparametri
+        \item XGBoost: gradient boosting și regularizare
+        \item Rețele Neuronale: arhitectură, drug embeddings, training
+        \item Metrici de evaluare
+    \end{itemize}
+
+    \item \textbf{Capitolul \ref{cap:setup} - Setup Experimental}:
+    \begin{itemize}
+        \item Mediul hardware și software
+        \item Hiperparametri detaliați pentru fiecare model
+        \item Proceduri de antrenare
+        \item Măsuri de reproducibilitate
+    \end{itemize}
+
+    \item \textbf{Capitolul \ref{cap:rezultate} - Rezultate}:
+    \begin{itemize}
+        \item Performanța generală a modelelor
+        \item Comparație IC50 vs AUC
+        \item Analiză per medicament
+        \item Predicții vs valori reale
+        \item Genele importante identificate
+        \item Curbe de învățare
+    \end{itemize}
+
+    \item \textbf{Capitolul \ref{cap:discutii} - Discuții și Limitări}:
+    \begin{itemize}
+        \item Interpretarea rezultatelor
+        \item Comparație cu literatura de specialitate
+        \item Limitări ale studiului
+        \item Direcții viitoare de cercetare
+    \end{itemize}
+\end{itemize}
+
+\section{Importanța Lucrării}
+\label{sec:importanta}
+
+Această lucrare contribuie la domeniul în creștere al \textbf{bioinformaticii computaționale} și \textbf{medicinii personalizate}:
+
+\begin{itemize}
+    \item \textbf{Pentru cercetare științifică}:
+    \begin{itemize}
+        \item Comparație riguroasă a metodelor ML pe date reale
+        \item Identificarea genelor importante pentru răspunsul la medicamente
+        \item Cod open-source pentru comunitatea științifică
+    \end{itemize}
+
+    \item \textbf{Pentru aplicații clinice viitoare}:
+    \begin{itemize}
+        \item Demonstrează fezabilitatea predicției răspunsului din date genomice
+        \item Pas către sisteme de decizie clinică asistate de AI
+        \item Fundație pentru validare clinică ulterioară
+    \end{itemize}
+
+    \item \textbf{Pentru dezvoltarea farmaceutică}:
+    \begin{itemize}
+        \item Poate ghida studiile preclinice
+        \item Identificarea biomarkerilor de răspuns
+        \item Stratificarea pacienților în studii clinice
+    \end{itemize}
+\end{itemize}
+
+În concluzie, această lucrare explorează modul în care machine learning poate transforma cantități mari de date moleculare în predicții acționabile pentru tratamentul personalizat al cancerului, reprezentând un pas important către viitorul medicinei de precizie.

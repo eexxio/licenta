@@ -1,0 +1,244 @@
+\chapter{Setup Experimental}
+\label{cap:setup}
+
+Acest capitol descrie mediul de lucru, hiperparametrii utilizați și procedurile de antrenare pentru toate modelele implementate.
+
+\section{Mediu de Lucru}
+\label{sec:mediu}
+
+\subsection{Hardware}
+\label{subsec:hardware}
+
+Toate experimentele au fost efectuate pe următoarea configurație:
+
+\begin{table}[h]
+\centering
+\caption{Configurație hardware}
+\label{tab:hardware}
+\begin{tabular}{ll}
+\toprule
+\textbf{Componentă} & \textbf{Specificații} \\
+\midrule
+Procesor & [Specificați CPU-ul] \\
+Memorie RAM & [Specificați RAM] \\
+GPU & [Specificați GPU dacă e disponibil] \\
+Stocare & SSD \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{Software}
+\label{subsec:software}
+
+\begin{table}[h]
+\centering
+\caption{Configurație software}
+\label{tab:software}
+\begin{tabular}{ll}
+\toprule
+\textbf{Librărie/Framework} & \textbf{Versiune} \\
+\midrule
+Python & 3.10+ \\
+PyTorch & 2.0+ \\
+XGBoost & 2.0+ \\
+scikit-learn & 1.3+ \\
+pandas & 2.0+ \\
+numpy & 1.24+ \\
+matplotlib & 3.7+ \\
+seaborn & 0.12+ \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\section{Hiperparametri}
+\label{sec:hiperparametri}
+
+Această secțiune prezintă detaliat hiperparametrii utilizați pentru fiecare model.
+
+\subsection{Random Forest}
+\label{subsec:rf_hiperparametri}
+
+\begin{table}[h]
+\centering
+\caption{Hiperparametri Random Forest}
+\label{tab:rf_hiperparametri_detail}
+\begin{tabular}{lll}
+\toprule
+\textbf{Parametru} & \textbf{Valoare} & \textbf{Justificare} \\
+\midrule
+n\_estimators & 500 & Echilibru între performanță și cost computațional \\
+max\_depth & 20 & Previne overfitting excesiv \\
+min\_samples\_split & 10 & Asigură split-uri statistice robuste \\
+max\_features & sqrt & Decorelează arborii \\
+n\_jobs & -1 & Paralelizare completă \\
+random\_state & 42 & Reproducibilitate \\
+oob\_score & True & Estimare out-of-bag pentru validare \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{XGBoost}
+\label{subsec:xgb_hiperparametri}
+
+\begin{table}[h]
+\centering
+\caption{Hiperparametri XGBoost}
+\label{tab:xgb_hiperparametri_detail}
+\begin{tabular}{lll}
+\toprule
+\textbf{Parametru} & \textbf{Valoare} & \textbf{Justificare} \\
+\midrule
+learning\_rate & 0.05 & Compromis între convergență și generalizare \\
+n\_estimators & 1000 & Număr maxim (early stopping oprește mai devreme) \\
+max\_depth & 6 & Standard pentru XGBoost, previne overfitting \\
+min\_child\_weight & 1 & Default optimal \\
+subsample & 0.8 & Introduce randomizare, previne overfitting \\
+colsample\_bytree & 0.8 & Decorelează arbori \\
+gamma & 0 & Fără regularizare suplimentară la split \\
+reg\_alpha & 0 & Regularizare L1 \\
+reg\_lambda & 1 & Regularizare L2 (default) \\
+early\_stopping\_rounds & 50 & Stop după 50 iterații fără îmbunătățire \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{Rețea Neuronală}
+\label{subsec:nn_hiperparametri}
+
+\begin{table}[h]
+\centering
+\caption{Hiperparametri Rețea Neuronală}
+\label{tab:nn_hiperparametri_detail}
+\begin{tabular}{lll}
+\toprule
+\textbf{Parametru} & \textbf{Valoare} & \textbf{Justificare} \\
+\midrule
+drug\_embedding\_dim & 64 & Reprezentare compactă, suficientă pentru 200 medicamente \\
+hidden\_dims & [1024, 512, 256, 128] & Reducere progresivă, permite învățare ierarhică \\
+dropout\_rates & [0.3, 0.3, 0.2, 0.2] & Dropout mai mare în layere mari, previne overfitting \\
+batch\_size & 128 & Echilibru memorie/convergență \\
+learning\_rate & 0.001 & Learning rate standard pentru Adam \\
+max\_epochs & 200 & Suficient pentru convergență cu early stopping \\
+optimizer & Adam & Convergență rapidă și stabilă \\
+lr\_scheduler & ReduceLROnPlateau & Reduce LR când validarea stagnează \\
+patience (scheduler) & 10 & Reduce LR după 10 epoci fără îmbunătățire \\
+patience (early stopping) & 20 & Stop după 20 epoci fără îmbunătățire \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\section{Proceduri de Antrenare}
+\label{sec:proceduri}
+
+\subsection{Preprocesare}
+\label{subsec:procedura_preprocesare}
+
+Înainte de antrenare, datele sunt preprocesate conform pipeline-ului descris în Capitolul \ref{cap:date}:
+
+\begin{enumerate}
+    \item Încărcarea datelor brute GDSC1
+    \item Îmbinarea expresiei genice cu răspunsul la medicamente
+    \item Filtrarea medicamentelor (≥30 sample-uri)
+    \item Selecția top 5,000 gene după varianță
+    \item Normalizare Z-score (parametri calculați pe train)
+    \item Encodarea medicamentelor (index pentru NN, one-hot pentru RF/XGBoost)
+    \item Împărțirea train/test by cell line (80/20)
+\end{enumerate}
+
+\subsection{Antrenarea Random Forest}
+\label{subsec:train_rf}
+
+Random Forest nu necesită un set de validare separat deoarece folosește out-of-bag (OOB) error estimation:
+
+\begin{enumerate}
+    \item Setarea random seed la 42
+    \item Antrenarea pe întregul set de training
+    \item Calcularea OOB score pentru estimarea performanței
+    \item Salvarea modelului antrenat
+\end{enumerate}
+
+Timp de antrenare: $\sim$ 10-15 minute per model (IC50/AUC).
+
+\subsection{Antrenarea XGBoost}
+\label{subsec:train_xgb}
+
+XGBoost folosește early stopping cu un set de validare:
+
+\begin{enumerate}
+    \item Setarea random seed la 42
+    \item Împărțirea train în 80\% train / 20\% validare
+    \item Antrenarea cu early stopping (monitorizare RMSE pe validare)
+    \item Oprirea când RMSE validare nu scade 50 de iterații
+    \item Returnarea modelului de la iterația optimă
+    \item Salvarea modelului și a istoricului de antrenare
+\end{enumerate}
+
+Timp de antrenare: $\sim$ 5-10 minute per model (cu early stopping).
+
+\subsection{Antrenarea Rețelei Neuronale}
+\label{subsec:train_nn}
+
+Rețeaua neuronală necesită cel mai mult tuning:
+
+\begin{enumerate}
+    \item Setarea random seed la 42 (PyTorch, numpy, Python)
+    \item Împărțirea train în 80\% train / 20\% validare
+    \item Inițializarea ponderilor (He initialization)
+    \item Antrenare în batch-uri de 128 sample-uri
+    \item Calcularea loss MSE și propagare înapoi
+    \item Actualizarea ponderilor cu Adam optimizer
+    \item Monitorizare loss pe validare după fiecare epocă
+    \item Reducere learning rate când validarea stagnează (10 epoci)
+    \item Early stopping când validarea nu se îmbunătățește (20 epoci)
+    \item Salvarea modelului cu cea mai bună performanță pe validare
+\end{enumerate}
+
+Timp de antrenare: $\sim$ 20-40 minute per model (depinde de CPU/GPU).
+
+\section{Evaluare}
+\label{sec:evaluare}
+
+După antrenare, toate modelele sunt evaluate pe setul de test folosind metricile descrise în Secțiunea \ref{sec:metrici}:
+
+\begin{enumerate}
+    \item Încărcarea modelului salvat
+    \item Predicții pe setul de test (complet separat de train/validare)
+    \item Calcularea metricilor: R², RMSE, MAE, Spearman, Pearson
+    \item Calcularea metricilor per medicament
+    \item Salvarea predicțiilor și metricilor
+\end{enumerate}
+
+\section{Reproducibilitate}
+\label{sec:reproducibilitate}
+
+Pentru a asigura reproducibilitatea rezultatelor:
+
+\begin{itemize}
+    \item \textbf{Random seed fix}: 42 pentru toate operațiile aleatoare
+    \item \textbf{Salvarea split-urilor}: Indicii train/test salvați pe disc
+    \item \textbf{Versiuni fixe}: requirements.txt cu versiuni exacte
+    \item \textbf{Cod versionat}: Git repository cu toate modificările
+    \item \textbf{Documentație}: Comentarii extensive în cod
+\end{itemize}
+
+Rularea scripturilor în ordine produce întotdeauna aceleași rezultate:
+
+\begin{verbatim}
+python scripts/01_preprocess_data.py
+python scripts/02_train_models.py
+python scripts/03_evaluate_models.py
+python scripts/04_generate_figures.py
+\end{verbatim}
+
+\section{Rezumat}
+\label{sec:rezumat_setup}
+
+Am descris:
+\begin{itemize}
+    \item Mediul hardware și software utilizat
+    \item Hiperparametrii detaliați pentru fiecare model
+    \item Procedurile de antrenare pentru RF, XGBoost și NN
+    \item Măsuri de reproducibilitate
+\end{itemize}
+
+Aceste setări au fost alese pentru a echilibra performanța modelelor cu timpul de antrenare și pentru a preveni overfitting-ul.

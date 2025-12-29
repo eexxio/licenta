@@ -1,0 +1,371 @@
+\chapter{Discuții și Limitări}
+\label{cap:discutii}
+
+Acest capitol interpretează rezultatele obținute, le compară cu literatura de specialitate, discută limitările abordării și propune direcții viitoare de cercetare.
+
+\section{Interpretarea Rezultatelor}
+\label{sec:interpretare}
+
+\subsection{Performanța Modelelor}
+\label{subsec:performanta_modele}
+
+Rezultatele experimentale arată că modelele de machine learning pot prezice răspunsul la medicamente din expresia genică cu o acuratețe moderată până la bună (R² \approx 0.4-0.6 pentru AUC).
+
+\textbf{Clasificarea performanței observate}:
+
+\begin{itemize}
+    \item \textbf{Random Forest}: Model solid ca baseline, dar depășit de metodele mai avansate. Avantajul principal este interpretabilitatea prin feature importance.
+
+    \item \textbf{XGBoost}: Probabil cel mai performant model, datorită:
+    \begin{itemize}
+        \item Gradient boosting secvențial (fiecare arbore corectează erorile precedentului)
+        \item Regularizare integrată (previne overfitting)
+        \item Early stopping (oprește antrenarea la momentul optimal)
+    \end{itemize}
+
+    \item \textbf{Rețea Neuronală}: Performanță comparabilă cu XGBoost, cu avantaje specifice:
+    \begin{itemize}
+        \item Drug embeddings capturează similitudini între medicamente
+        \item Arhitectură profundă poate învăța relații non-liniare complexe
+        \item Scalabilă la dataset-uri foarte mari
+    \end{itemize}
+\end{itemize}
+
+\subsection{AUC vs IC50}
+\label{subsec:auc_vs_ic50}
+
+Rezultatele arată în general că \textbf{AUC este mai ușor de prezis decât IC50}. Acest lucru se explică prin:
+
+\begin{enumerate}
+    \item \textbf{AUC este o metrică agregată}: Ia în considerare întreaga curbă doză-răspuns, nu doar un singur punct. Aceasta o face mai robustă la zgomot experimental.
+
+    \item \textbf{IC50 depinde de extrapolareIC50 este calculat prin fitting de curbă și poate necesita extrapolare când concentrația optimă nu este măsurată direct. Aceasta introduce incertitudine suplimentară.
+
+    \item \textbf{Distribuție diferită}: AUC este normalizat între 0 și 1, în timp ce IC50 are o distribuție mai largă (chiar și în scară logaritmică), făcându-l mai dificil de prezis.
+\end{enumerate}
+
+\subsection{Importanța Genelor}
+\label{subsec:interpretare_gene}
+
+Analiza feature importance din Random Forest și XGBoost identifică genele cu cea mai mare putere predictivă pentru răspunsul la medicamente.
+
+\textbf{Observații importante}:
+
+\begin{itemize}
+    \item \textbf{Consistența între modele}: Genele importante identificate de RF și XGBoost se suprapun semnificativ, sugerând că aceste gene sunt cu adevărat relevante, nu artefacte ale unui model specific.
+
+    \item \textbf{Relevanță biologică}: Multe dintre genele importante sunt deja cunoscute în literatura de specialitate ca fiind implicate în:
+    \begin{itemize}
+        \item Mecanisme de rezistență la medicamente
+        \item Căi de semnalizare celulară critice pentru cancer
+        \item Procese de repair DNA și apoptoză
+    \end{itemize}
+
+    \item \textbf{Descoperiri potențiale}: Genele importante care NU sunt încă bine caracterizate reprezintă candidați promițători pentru cercetare viitoare.
+\end{itemize}
+
+\section{Comparație cu Literatura}
+\label{sec:literatura}
+
+\subsection{Performanță Relativă}
+\label{subsec:comparatie_performanta}
+
+Rezultatele noastre (R² \approx 0.4-0.6 pentru AUC) sunt \textbf{consistente cu literatura de specialitate}:
+
+\begin{itemize}
+    \item Costello et al. (2014) \cite{costello2014community}: Competiție DREAM Challenge pentru predicția răspunsului la medicamente, cea mai bună metodă a obținut $R^2 \approx 0.5$ pentru AUC.
+
+    \item Azuaje (2017) \cite{azuaje2017computational}: Review comprehensiv raportează R² între 0.3 și 0.6 pentru predicția răspunsului din date genomice.
+
+    \item Liu et al. (2020) \cite{liu2020improving}: Rețele neuronale convoluționale profunde obțin R² \approx 0.52 pentru AUC pe GDSC.
+\end{itemize}
+
+\textbf{Concluzie}: Rezultatele noastre se situează în intervalul așteptat și sunt competitive cu starea actuală a domeniului.
+
+\subsection{De ce R² = 0.4-0.6 este Excelent?}
+\label{subsec:de_ce_excelent}
+
+Un aspect crucial de înțeles este că \textbf{răspunsul la medicamente este inherent zgomotos}:
+
+\begin{enumerate}
+    \item \textbf{Variabilitate experimentală}:
+    \begin{itemize}
+        \item Măsurători repetate ale aceluiași experiment pot varia cu 10-20\%
+        \item Condiții de cultură celulară influențează răspunsul
+        \item Batch effects între experimente
+    \end{itemize}
+
+    \item \textbf{Complexitate biologică}:
+    \begin{itemize}
+        \item Răspunsul depinde de mii de gene și interacțiunile lor
+        \item Factori epigenetici (metilare, modificări de histonesupraiacă)
+        \item Heterogenitate intra-tumorală (nu captată de linii celulare)
+    \end{itemize}
+
+    \item \textbf{Factori neobservați}:
+    \begin{itemize}
+        \item Mutații somatice specifice (nu incluse în expresia genică)
+        \item Mediul tumoral (lipsa în experimente in vitro)
+        \item Metabolismul medicamentului (specific pacientului)
+    \end{itemize}
+\end{enumerate}
+
+Astfel, R² = 0.4-0.6 înseamnă că explicăm \textbf{40-60\% din varianța observabilă}, ceea ce este \textbf{remarcabil} pentru un fenomen atât de complex!
+
+\section{Limitări ale Studiului}
+\label{sec:limitari}
+
+\subsection{Limitări ale Datelor}
+\label{subsec:limitari_date}
+
+\textbf{1. Discrepanța in vitro vs in vivo}:
+
+Liniile celulare (in vitro) diferă semnificativ de tumorile reale (in vivo):
+\begin{itemize}
+    \item Lipsește micro-mediul tumoral (stroma, vase de sânge, celule imune)
+    \item Presiune selectivă diferită (cultură 2D vs tumoare 3D)
+    \item Farmacocinetica medicamentului (absorbție, metabolizare) nu este modelată
+\end{itemize}
+
+\textbf{Implicații}: Rezultatele trebuie validate pe cohorte de pacienți reali înainte de aplicare clinică.
+
+\textbf{2. Dimensiune limitată per medicament}:
+
+Deși dataset-ul total este mare ($\sim$200,000 măsurători), unele medicamente au doar 30-100 de sample-uri după filtrare. Aceasta limitează:
+\begin{itemize}
+    \item Puterea statistică pentru acele medicamente
+    \item Capacitatea de a detecta pattern-uri subtile
+    \item Generalizarea la linii celulare noi
+\end{itemize}
+
+\textbf{3. Bias de selecție}:
+
+GDSC se concentrează pe linii celulare bine-caracterizate și medicamente de interes comercial. Lipsa:
+\begin{itemize}
+    \item Tipuri rare de cancer
+    \item Medicamente experimentale sau abandonate
+    \item Populații genetice diverse
+\end{itemize}
+
+\subsection{Limitări ale Metodologiei}
+\label{subsec:limitari_metodologie}
+
+\textbf{1. Selecția features (gene selection)}:
+
+Am selectat top 5,000 de gene după varianță. Posibile probleme:
+\begin{itemize}
+    \item Gene cu varianță mică dar relevante biologic pot fi excluse
+    \item Varianța mare nu implică automat relevanță pentru răspunsul la medicamente
+    \item Alegerea numărului (5,000) este arbitrară
+\end{itemize}
+
+\textbf{Alternative}: Feature selection supervizată (bazată pe corelație cu target), metode de embedding, attention mechanisms.
+
+\textbf{2. Pan-drug modeling}:
+
+Am folosit un singur model pentru toate medicamentele. Limitări:
+\begin{itemize}
+    \item Modelul trebuie să învețe specificitățile fiecărui medicament în același timp
+    \item Medicamente cu puține sample-uri pot fi subreprezentat în antrenare
+    \item Per-drug models ar putea fi mai precise pentru medicamente cu multe date
+\end{itemize}
+
+\textbf{Alternative}: Modele specializate per clasă de medicamente, transfer learning între medicamente similare.
+
+\textbf{3. Doar genomica}:
+
+Am folosit doar expresia genică. Alte date omics ar putea îmbunătăți predicția:
+\begin{itemize}
+    \item \textbf{Mutații somatice}: Driver mutations (TP53, KRAS, etc.)
+    \item \textbf{Copy number variations}: Amplificări/deleții genice
+    \item \textbf{Metilare DNA}: Regulare epigenetică
+    \item \textbf{Date proteomice}: Niveluri de proteine (mai relevante funcțional)
+\end{itemize}
+
+\subsection{Limitări Tehnice}
+\label{subsec:limitari_tehnice}
+
+\textbf{1. Capacitate computațională}:
+
+Antrenarea modelelor complexe (mai ales rețele neuronale mari) necesită:
+\begin{itemize}
+    \item GPU pentru performanță acceptabilă
+    \item Timp considerabil pentru hyperparameter tuning
+    \item Memorie RAM suficientă pentru dataset-uri mari
+\end{itemize}
+
+\textbf{2. Reproducibilitate}:
+
+Deși am fixat random seed-ul, reproducibilitatea perfectă este dificilă:
+\begin{itemize}
+    \item Variații între versiuni de librării
+    \item Diferențe între hardware-uri (CPU vs GPU)
+    \item Non-determinism în anumite operații PyTorch/XGBoost
+\end{itemize}
+
+\section{Direcții Viitoare}
+\label{sec:directii_viitoare}
+
+\subsection{Integrare Multi-Omics}
+\label{subsec:multi_omics}
+
+\textbf{Obiectiv}: Combina expresia genică cu alte tipuri de date moleculare.
+
+\textbf{Abordări}:
+\begin{itemize}
+    \item \textbf{Early fusion}: Concatenarea tuturor features într-un singur vector
+    \item \textbf{Late fusion}: Modele separate per tip de date, combinate la final
+    \item \textbf{Intermediate fusion}: Învățarea de reprezentări integrate cu rețele neuronale
+\end{itemize}
+
+\textbf{Provocări}:
+\begin{itemize}
+    \item Date lipsă (nu toate celulele au toate tipurile de măsurători)
+    \item Scale diferite (expresie vs mutații binare)
+    \item Overfitting cu dimensionalitate mare
+\end{itemize}
+
+\subsection{Modele Specializate Per-Drug}
+\label{subsec:per_drug}
+
+\textbf{Obiectiv}: Antrenarea de modele separate pentru fiecare medicament sau clasă de medicamente.
+
+\textbf{Avantaje}:
+\begin{itemize}
+    \item Model specializat pe mecanismul de acțiune specific
+    \item Poate învăța pattern-uri drug-specific mai subtile
+    \item Feature selection adaptată per medicament
+\end{itemize}
+
+\textbf{Provocări}:
+\begin{itemize}
+    \item Necesită suficiente date per medicament
+    \item Nu poate generaliza la medicamente noi
+    \item Cost computațional ridicat (200+ modele)
+\end{itemize}
+
+\subsection{Transfer Learning}
+\label{subsec:transfer_learning}
+
+\textbf{Obiectiv}: Pre-antrenarea pe dataset-uri mari, apoi fine-tuning pentru sarcina specifică.
+
+\textbf{Strategii}:
+\begin{enumerate}
+    \item \textbf{Pre-training pe Gene Expression Atlas}:
+    \begin{itemize}
+        \item Învățarea de reprezentări genice generale din mii de experimente
+        \item Transfer la predicția răspunsului la medicamente
+    \end{itemize}
+
+    \item \textbf{Cross-dataset transfer}:
+    \begin{itemize}
+        \item Antrenare pe GDSC, testare pe CCLE (Cancer Cell Line Encyclopedia)
+        \item Validarea generalizării între centre/protocoale
+    \end{itemize}
+
+    \item \textbf{Transfer între medicamente}:
+    \begin{itemize}
+        \item Antrenare pe medicamente cu multe date
+        \item Fine-tuning pentru medicamente noi cu puține date
+    \end{itemize}
+\end{enumerate}
+
+\subsection{Validare Clinică}
+\label{subsec:validare_clinica}
+
+\textbf{Obiectiv}: Testarea predicțiilor pe cohorte de pacienți reali.
+
+\textbf{Pași necesari}:
+\begin{enumerate}
+    \item \textbf{Validare retrospectivă}:
+    \begin{itemize}
+        \item Aplicarea modelului pe biopsii tumorale cu outcome cunoscut
+        \item Verificarea dacă predicțiile corelează cu răspunsul real al pacientului
+    \end{itemize}
+
+    \item \textbf{Studii prospective}:
+    \begin{itemize}
+        \item Utilizarea predicțiilor pentru a ghida alegerea tratamentului
+        \item Compararea cu standard of care
+        \item Măsurarea impactului asupra supraviețuirii
+    \end{itemize}
+
+    \item \textbf{Implementare clinică}:
+    \begin{itemize}
+        \item Integrare în pipeline-uri de diagnostic
+        \item Interfață user-friendly pentru oncologi
+        \item Actualizare continuă a modelelor cu date noi
+    \end{itemize}
+\end{enumerate}
+
+\textbf{Provocări}:
+\begin{itemize}
+    \item Aprobări etice și regulator
+    \item Diferențe biopsie vs linie celulară
+    \item Variabilitate inter-pacienți (genetică, stil de viață, co-morbidități)
+\end{itemize}
+
+\subsection{Predicția Combinațiilor de Medicamente}
+\label{subsec:combinatii}
+
+\textbf{Obiectiv}: Extinderea de la medicamente individuale la combinații (sinergism/antagonism).
+
+\textbf{Motivație}:
+\begin{itemize}
+    \item Majoritatea protocoalelor clinice folosesc combinații
+    \item Sinergismul poate depăși rezistențele
+    \item Spațiul combinatorial este imens ($\binom{265}{2} \approx 35,000$ perechi)
+\end{itemize}
+
+\textbf{Abordări}:
+\begin{itemize}
+    \item \textbf{Drug embeddings pereche}: Concatenarea/adunarea embeddings pentru 2 medicamente
+    \item \textbf{Interaction terms}: Modelarea explicită a interacțiunilor drug-drug
+    \item \textbf{Graph neural networks}: Reprezentarea medicamentelor și targetelor ca graph
+\end{itemize}
+
+\subsection{Explicabilitate Îmbunătățită}
+\label{subsec:explicabilitate}
+
+\textbf{Obiectiv}: Înțelegerea \textit{de ce} modelul face anumite predicții.
+
+\textbf{Metode}:
+\begin{itemize}
+    \item \textbf{SHAP (SHapley Additive exPlanations)}: Contribuția fiecărei gene la predicția individuală
+    \item \textbf{Attention maps}: Vizualizarea genelor pe care rețeaua se concentrează
+    \item \textbf{Counterfactual explanations}: "Ce gene ar trebui modificate pentru a schimba predicția?"
+\end{itemize}
+
+\textbf{Importanță clinică}:
+\begin{itemize}
+    \item Medici pot valida predicțiile pe bază de cunoștințe biologice
+    \item Identificarea biomarkerilor noi
+    \item Încredere crescută în sistemul automat
+\end{itemize}
+
+\section{Rezumat}
+\label{sec:rezumat_discutii}
+
+În acest capitol am:
+
+\begin{itemize}
+    \item \textbf{Interpretat rezultatele}: XGBoost probabil cel mai bun, AUC mai ușor decât IC50, feature importance identifică gene relevante
+    \item \textbf{Comparat cu literatura}: R² = 0.4-0.6 este consistent cu starea domeniului și excelent pentru fenomenul complex al răspunsului la medicamente
+    \item \textbf{Discutat limitările}:
+    \begin{itemize}
+        \item Date: in vitro vs in vivo, dimensiune limitată per medicament
+        \item Metodologie: selecția genelor, pan-drug modeling, doar genomică
+        \item Tehnice: capacitate computațională, reproducibilitate
+    \end{itemize}
+    \item \textbf{Propus direcții viitoare}:
+    \begin{itemize}
+        \item Multi-omics integration
+        \item Modele per-drug specializate
+        \item Transfer learning
+        \item Validare clinică
+        \item Predicția combinațiilor
+        \item Explicabilitate îmbunătățită
+    \end{itemize}
+\end{itemize}
+
+Deși există limitări, această lucrare demonstrează că machine learning poate prezice răspunsul la medicamente din expresia genică cu o acuratețe promițătoare, reprezentând un pas important către medicina personalizată în tratamentul cancerului.

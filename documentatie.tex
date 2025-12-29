@@ -1,9 +1,15 @@
 % !TeX root = documentatie.tex
-\documentclass[12pt]{report}
+\documentclass[12pt,a4paper]{report}
 \usepackage[utf8]{inputenc}
+\usepackage[romanian]{babel}
 \usepackage{graphicx}
 \usepackage{booktabs}
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{tikz}
+\usetikzlibrary{positioning}
 \usepackage{hyperref}
+\usepackage[left=3cm,right=2.5cm,top=2.5cm,bottom=2.5cm]{geometry}
 
 \begin{document}
 
@@ -15,23 +21,13 @@ modele pan-drug pe date GDSC}
 
 \tableofcontents
 
-\chapter{Introducere}
-\input{chapters/01_introduction}
-
-\chapter{Date și preprocesare}
-\input{chapters/02_data}
-
-\chapter{Metode}
-\input{chapters/03_methods}
-
-\chapter{Setup experimental}
-\input{chapters/04_experiments}
-
-\chapter{Rezultate}
-\input{chapters/05_results}
-
-\chapter{Discuții și limitări}
-\input{chapters/06_discussion}
+% Uncomment chapters as you complete them
+% \include{chapters/01_introduction}
+\include{chapters/02_data}
+\include{chapters/03_methods}
+\include{chapters/04_experiments}
+% \include{chapters/05_results}
+% \include{chapters/06_discussion}
 
 \bibliographystyle{plain}
 \bibliography{refs}

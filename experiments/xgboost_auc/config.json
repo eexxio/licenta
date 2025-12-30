@@ -1,0 +1,12 @@
+{
+  "model_type": "XGBoost",
+  "target": "AUC",
+  "n_samples_train": 208896,
+  "n_samples_val": 51715,
+  "n_gene_features": 5000,
+  "n_drug_features": 402,
+  "n_total_features": 5402,
+  "random_seed": 42,
+  "trained_at": "2025-12-30T13:30:13.083264",
+  "best_iteration": 999
+}

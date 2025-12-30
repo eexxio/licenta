@@ -153,9 +153,11 @@ RF_CONFIG = {
 }
 
 # GPU settings for Random Forest
-# Set to True to use RAPIDS cuML (GPU-accelerated)
-# Set to False to use scikit-learn (CPU-only)
-USE_GPU_RF = True  # Requires: conda install -c rapidsai -c conda-forge cuml
+# cuML (GPU acceleration) only works on Linux
+# On Windows, Random Forest uses parallel CPU processing (n_jobs=-1)
+# Alternatively, use HistGradientBoosting for faster training
+import platform
+USE_GPU_RF = platform.system() == 'Linux'  # Only enable on Linux where cuML works
 
 # XGBoost
 XGB_CONFIG = {
@@ -170,9 +172,9 @@ XGB_CONFIG = {
     "reg_lambda": 1.0,            # L2 regularization
     "early_stopping_rounds": 50,  # Stop if no improvement for N rounds
     "random_state": RANDOM_SEED,
-    "n_jobs": -1,                 # Use all CPU cores
-    "tree_method": "gpu_hist",    # GPU-accelerated histogram algorithm
-    "device": "cuda"              # Use NVIDIA GPU
+    "n_jobs": -1,                 # Use all CPU cores (fallback if GPU unavailable)
+    "tree_method": "hist",        # Will be overridden to "gpu_hist" if GPU available
+    "device": "cuda",             # Use GPU if available (XGBoost 2.0+)
 }
 
 # Neural Network (PyTorch)
@@ -279,6 +281,23 @@ ROMANIAN_LABELS = {
     "random_forest": "Random Forest",
     "xgboost": "XGBoost",
     "neural_network": "Rețea Neuronală",
+    "frequency": "Frecvență",
+    "ic50_distribution": "Distribuția valorilor IC50",
+    "auc_distribution": "Distribuția valorilor AUC",
+    "samples": "Eșantioane",
+    "drugs": "Medicamente",
+    "epoch": "Epocă",
+    "loss": "Pierdere",
+    "drug_id": "ID Medicament",
+    "n_samples": "Număr de Eșantioane",
+    "samples_per_drug": "Eșantioane per Medicament",
+    "model_comparison": "Compararea Modelelor",
+    "actual_value": "Valoare Reală",
+    "predicted_value": "Valoare Prezisă",
+    "importance": "Importanță",
+    "feature_importance": "Importanța Caracteristicilor",
+    "learning_curve": "Curba de Învățare",
+    "per_drug_performance": "Performanță per Medicament",
 }
 
 # =============================================================================

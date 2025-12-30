@@ -227,7 +227,7 @@ def plot_predictions_vs_actual(predictions_df, model_name, target_name, figures_
     logger.info(f"  ✓ Saved: {pred_path}")
 
 
-def plot_feature_importance(model, model_name, target_name, gene_names, figures_dir):
+def plot_feature_importance(model, model_name, target_name, gene_names, figures_dir, unique_drugs=None, drug_names_map=None):
     """
     Generate bar chart of top important features.
 
@@ -245,8 +245,25 @@ def plot_feature_importance(model, model_name, target_name, gene_names, figures_
     # Get top 30 features
     top_indices = np.argsort(importance)[-30:][::-1]
     top_importance = importance[top_indices]
-    top_genes = [gene_names[i] if i < len(gene_names) else f'Feature {i}'
-                 for i in top_indices]
+    
+    # Create proper labels for features
+    top_genes = []
+    for i in top_indices:
+        if i < len(gene_names):
+            # Gene feature
+            label = gene_names[i].replace('GENE_GENE_', 'GENE_')
+        elif unique_drugs is not None and drug_names_map is not None:
+            # Drug feature
+            drug_idx = i - len(gene_names)
+            if drug_idx < len(unique_drugs):
+                drug_id = unique_drugs[drug_idx]
+                drug_name = drug_names_map.get(drug_id, f"Drug_{drug_id}")
+                label = f"Drug: {drug_name}"
+            else:
+                label = f'Feature {i}'
+        else:
+            label = f'Feature {i}'
+        top_genes.append(label)
 
     fig, ax = plt.subplots(figsize=(10, 12))
     y_pos = np.arange(len(top_genes))
@@ -270,19 +287,19 @@ def plot_feature_importance(model, model_name, target_name, gene_names, figures_
     logger.info(f"  ✓ Saved: {importance_path}")
 
 
-def plot_learning_curves(exp_name, model_name, target_name, figures_dir):
+def plot_learning_curves(model_name, target, display_model_name, display_target_name, figures_dir):
     """
     Generate learning curves for models with training history.
 
     Chapter 5 figure.
     """
-    logger.info(f"\nGenerating learning curves ({model_name}, {target_name})...")
+    logger.info(f"\nGenerating learning curves ({display_model_name}, {display_target_name})...")
 
-    exp_dir = get_experiment_dir(exp_name)
+    exp_dir = get_experiment_dir(model_name, target)
     history_path = exp_dir / "training_history.json"
 
     if not history_path.exists():
-        logger.warning(f"  ⚠ No training history found for {model_name}")
+        logger.warning(f"  ⚠ No training history found for {display_model_name}")
         return
 
     with open(history_path, 'r') as f:
@@ -308,15 +325,15 @@ def plot_learning_curves(exp_name, model_name, target_name, figures_dir):
             ax.set_xlabel('Iterație', fontsize=12)
             ax.set_ylabel('RMSE', fontsize=12)
 
-    ax.set_title(f'{ROMANIAN_LABELS["learning_curve"]} - {model_name} ({target_name})',
+    ax.set_title(f'{ROMANIAN_LABELS["learning_curve"]} - {display_model_name} ({display_target_name})',
                  fontsize=14, fontweight='bold')
     ax.legend(fontsize=11)
     ax.grid(True, alpha=0.3)
 
     plt.tight_layout()
 
-    model_short = model_name.lower().replace(' ', '_')
-    filename = f"ch5_fig6_learning_{model_short}_{target_name.lower()}.png"
+    model_short = display_model_name.lower().replace(' ', '_')
+    filename = f"ch5_fig6_learning_{model_short}_{display_target_name.lower()}.png"
     learning_path = figures_dir / filename
     plt.savefig(learning_path, dpi=300, bbox_inches='tight')
     plt.close()
@@ -392,6 +409,17 @@ def main():
     y_train_auc = train_data['y_train_auc']
     drug_ids_train = train_data['drug_ids_train']
     gene_names = train_data['selected_genes']
+    
+    # Load drug names for feature importance visualization
+    from pathlib import Path as P
+    compounds_path = P(__file__).parent.parent / "archive" / "screened_compounds.csv"
+    drug_names_map = {}
+    if compounds_path.exists():
+        compounds_df = pd.read_csv(compounds_path)
+        drug_names_map = dict(zip(compounds_df['DRUG_ID'], compounds_df['DRUG_NAME']))
+        logger.info(f"✓ Loaded {len(drug_names_map)} drug names")
+    else:
+        logger.warning(f"⚠ Drug names file not found: {compounds_path}")
 
     # Load metrics
     metrics_path = Path(RESULTS_DIR) / "metrics" / "model_comparison.csv"
@@ -440,21 +468,30 @@ def main():
     from src.models.xgboost_model import XGBoostModel
 
     # Load models for feature importance
-    rf_auc = RandomForestModel.load(str(get_experiment_dir("rf_auc") / "model.pkl"))
-    xgb_auc = XGBoostModel.load(str(get_experiment_dir("xgb_auc") / "model.pkl"))
+    rf_auc = RandomForestModel.load(str(get_experiment_dir("random_forest", "auc") / "model.pkl"))
+    xgb_auc = XGBoostModel.load(str(get_experiment_dir("xgboost", "auc") / "model.pkl"))
+    
+    # Load unique drugs for each model
+    rf_drugs_path = get_experiment_dir("random_forest", "auc") / "unique_drugs.json"
+    xgb_drugs_path = get_experiment_dir("xgboost", "auc") / "unique_drugs.json"
+    
+    with open(rf_drugs_path, 'r') as f:
+        rf_unique_drugs = json.load(f)
+    with open(xgb_drugs_path, 'r') as f:
+        xgb_unique_drugs = json.load(f)
 
-    plot_feature_importance(rf_auc, "RandomForest", "AUC", gene_names, figures_dir)
-    plot_feature_importance(xgb_auc, "XGBoost", "AUC", gene_names, figures_dir)
+    plot_feature_importance(rf_auc, "RandomForest", "AUC", gene_names, figures_dir, rf_unique_drugs, drug_names_map)
+    plot_feature_importance(xgb_auc, "XGBoost", "AUC", gene_names, figures_dir, xgb_unique_drugs, drug_names_map)
 
     # Learning curves
     logger.info("\n" + "=" * 80)
     logger.info("GENERATING LEARNING CURVE FIGURES")
     logger.info("=" * 80)
 
-    plot_learning_curves("xgb_ic50", "XGBoost", "IC50", figures_dir)
-    plot_learning_curves("xgb_auc", "XGBoost", "AUC", figures_dir)
-    plot_learning_curves("nn_ic50", "NeuralNetwork", "IC50", figures_dir)
-    plot_learning_curves("nn_auc", "NeuralNetwork", "AUC", figures_dir)
+    plot_learning_curves("xgboost", "ic50", "XGBoost", "IC50", figures_dir)
+    plot_learning_curves("xgboost", "auc", "XGBoost", "AUC", figures_dir)
+    plot_learning_curves("neural_network", "ic50", "NeuralNetwork", "IC50", figures_dir)
+    plot_learning_curves("neural_network", "auc", "NeuralNetwork", "AUC", figures_dir)
 
     # Per-drug performance
     logger.info("\n" + "=" * 80)

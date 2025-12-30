@@ -18,6 +18,7 @@ Date: 2026
 
 import os
 import sys
+import gc
 import numpy as np
 import pandas as pd
 from pathlib import Path
@@ -96,36 +97,70 @@ def main():
         sys.exit(1)
 
     # =========================================================================
-    # STEP 2: SELECT TOP GENES (BEFORE MERGING - MEMORY OPTIMIZATION)
+    # STEP 2: SPLIT CELL LINES FIRST (BEFORE MERGING - MEMORY EFFICIENT)
     # =========================================================================
     logger.info("\n" + "=" * 80)
-    logger.info("STEP 2: GENE SELECTION (BEFORE MERGING)")
+    logger.info("STEP 2: SPLITTING CELL LINES (BEFORE MERGING)")
     logger.info("=" * 80)
-    logger.info(f"Selecting top {N_TOP_GENES} genes by variance to reduce memory usage")
-    logger.info(f"Original genes: {gene_expr_df.shape[1]}")
+    logger.info("CRITICAL: We split cell lines FIRST to prevent data leakage!")
+    logger.info("Gene selection will be done ONLY on training cell lines.")
+
+    # Get cell lines that exist in both gene expression and drug response
+    expr_cell_lines = set(gene_expr_df.index)
+    drug_cell_lines = set(drug_response_df['COSMIC_ID'].unique())
+    common_cell_lines = list(expr_cell_lines & drug_cell_lines)
+    
+    logger.info(f"Cell lines in expression data: {len(expr_cell_lines)}")
+    logger.info(f"Cell lines in drug response: {len(drug_cell_lines)}")
+    logger.info(f"Common cell lines: {len(common_cell_lines)}")
+
+    # Split cell lines into train/test (80/20)
+    np.random.seed(RANDOM_SEED)
+    np.random.shuffle(common_cell_lines)
+    n_test = int(len(common_cell_lines) * 0.2)
+    test_cell_lines = set(common_cell_lines[:n_test])
+    train_cell_lines = set(common_cell_lines[n_test:])
+
+    logger.info(f"✓ Cell line split:")
+    logger.info(f"  - Train cell lines: {len(train_cell_lines)}")
+    logger.info(f"  - Test cell lines: {len(test_cell_lines)}")
+    logger.info("  - No overlap between train and test!")
+
+    # =========================================================================
+    # STEP 3: SELECT TOP GENES (ONLY FROM TRAINING CELL LINES - NO LEAKAGE!)
+    # =========================================================================
+    logger.info("\n" + "=" * 80)
+    logger.info("STEP 3: GENE SELECTION (TRAINING CELL LINES ONLY)")
+    logger.info("=" * 80)
+    logger.info(f"Selecting top {N_TOP_GENES} genes by variance from TRAINING cell lines only")
 
     try:
-        # Calculate variance for each gene (across cell lines)
-        logger.info(f"Calculating variance for {gene_expr_df.shape[1]} genes...")
-        gene_variances = gene_expr_df.var(axis=0)
+        # Get gene expression for training cell lines only
+        train_cell_lines_list = [cl for cl in gene_expr_df.index if cl in train_cell_lines]
+        gene_expr_train = gene_expr_df.loc[train_cell_lines_list]
 
-        # Select top N genes with highest variance using integer-based indexing
-        # argsort returns integer positions, we want the top N
-        top_gene_positions = gene_variances.argsort()[-N_TOP_GENES:].values
+        # Calculate variance for each gene (ONLY from training cell lines!)
+        logger.info(f"Calculating variance for {gene_expr_train.shape[1]} genes...")
+        gene_variances = gene_expr_train.var(axis=0).values  # Convert to numpy array
 
-        logger.info(f"Selected {len(top_gene_positions)} gene positions (expected {N_TOP_GENES})")
+        # Select top N genes with highest variance
+        top_gene_indices = np.argsort(gene_variances)[-N_TOP_GENES:]
+        selected_gene_columns = gene_expr_df.columns[top_gene_indices].tolist()
 
-        # Filter gene expression to keep only top genes using integer positions
-        gene_expr_df_filtered = gene_expr_df.iloc[:, top_gene_positions].copy()
+        logger.info(f"✓ Selected {len(selected_gene_columns)} genes based on training variance")
 
-        logger.info(f"✓ Gene selection complete:")
-        logger.info(f"  - Original shape: {gene_expr_df.shape}")
-        logger.info(f"  - Filtered shape: {gene_expr_df_filtered.shape}")
-        logger.info(f"  - Memory reduction: {gene_expr_df.shape[1]} → {gene_expr_df_filtered.shape[1]} genes")
+        # Filter gene expression to keep only selected genes (for ALL cell lines)
+        gene_expr_filtered = gene_expr_df.iloc[:, top_gene_indices].copy()
+        logger.info(f"  - Filtered gene expression shape: {gene_expr_filtered.shape}")
 
-        if gene_expr_df_filtered.shape[1] != N_TOP_GENES:
-            logger.error(f"ERROR: Expected {N_TOP_GENES} genes but got {gene_expr_df_filtered.shape[1]}")
-            sys.exit(1)
+        # Rename columns with GENE_ prefix
+        gene_expr_filtered.columns = [f"GENE_{col}" for col in gene_expr_filtered.columns]
+        selected_genes = gene_expr_filtered.columns.tolist()
+
+        # Free memory
+        del gene_expr_train, gene_expr_df
+        import gc
+        gc.collect()
 
     except Exception as e:
         logger.error(f"Failed to select genes: {e}")
@@ -134,115 +169,89 @@ def main():
         sys.exit(1)
 
     # =========================================================================
-    # STEP 3: MERGE DATA
+    # STEP 4: CREATE TRAIN AND TEST DATASETS
     # =========================================================================
     logger.info("\n" + "=" * 80)
-    logger.info("STEP 3: MERGING GENE EXPRESSION + DRUG RESPONSE")
+    logger.info("STEP 4: CREATING TRAIN AND TEST DATASETS")
     logger.info("=" * 80)
 
     try:
-        merged_df = merge_expression_and_response(gene_expr_df_filtered, drug_response_df)
-        logger.info(f"✓ Data merged: {merged_df.shape}")
-        logger.info(f"  - Total samples: {len(merged_df)}")
-        logger.info(f"  - Unique cell lines: {merged_df['COSMIC_ID'].nunique()}")
-        logger.info(f"  - Unique drugs: {merged_df['DRUG_ID'].nunique()}")
+        # Filter drug response for train/test cell lines
+        train_drug_response = drug_response_df[drug_response_df['COSMIC_ID'].isin(train_cell_lines)].copy()
+        test_drug_response = drug_response_df[drug_response_df['COSMIC_ID'].isin(test_cell_lines)].copy()
+
+        logger.info(f"Train drug response samples: {len(train_drug_response)}")
+        logger.info(f"Test drug response samples: {len(test_drug_response)}")
+
+        # Free memory
+        del drug_response_df
+        gc.collect()
+
     except Exception as e:
-        logger.error(f"Failed to merge data: {e}")
+        logger.error(f"Failed to filter drug response: {e}")
         sys.exit(1)
 
     # =========================================================================
-    # STEP 4: SPLIT DATA (BY CELL LINE)
+    # STEP 5: NORMALIZE TRAINING DATA
     # =========================================================================
     logger.info("\n" + "=" * 80)
-    logger.info("STEP 4: SPLITTING INTO TRAIN/TEST (BY CELL LINE)")
-    logger.info("=" * 80)
-    logger.info("CRITICAL: We split by cell line to prevent data leakage!")
-    logger.info("This ensures no cell line appears in both train and test sets.")
-
-    splitter = GDSCDataSplitter()
-
-    try:
-        train_df, test_df = splitter.split_by_cell_line(
-            merged_df,
-            test_size=0.2,
-            cell_line_col='COSMIC_ID'
-        )
-
-        logger.info(f"✓ Data split complete:")
-        logger.info(f"  - Training samples: {len(train_df)}")
-        logger.info(f"  - Test samples: {len(test_df)}")
-        logger.info(f"  - Train cell lines: {train_df['COSMIC_ID'].nunique()}")
-        logger.info(f"  - Test cell lines: {test_df['COSMIC_ID'].nunique()}")
-
-        # Verify no overlap
-        train_cell_lines = set(train_df['COSMIC_ID'].unique())
-        test_cell_lines = set(test_df['COSMIC_ID'].unique())
-        overlap = train_cell_lines & test_cell_lines
-
-        if len(overlap) > 0:
-            logger.error(f"ERROR: Found {len(overlap)} cell lines in both train and test!")
-            logger.error("This is data leakage and will invalidate results!")
-            sys.exit(1)
-        else:
-            logger.info("✓ No overlap between train and test cell lines - data leakage prevented!")
-
-    except Exception as e:
-        logger.error(f"Failed to split data: {e}")
-        sys.exit(1)
-
-    # Save split indices for reproducibility
-    splits_dir = Path(PROCESSED_DATA_DIR) / "splits"
-    splits_dir.mkdir(parents=True, exist_ok=True)
-
-    train_indices_path = splits_dir / "train_indices.txt"
-    test_indices_path = splits_dir / "test_indices.txt"
-
-    train_df.index.to_series().to_csv(train_indices_path, index=False, header=False)
-    test_df.index.to_series().to_csv(test_indices_path, index=False, header=False)
-
-    logger.info(f"\n✓ Split indices saved:")
-    logger.info(f"  - Train: {train_indices_path}")
-    logger.info(f"  - Test: {test_indices_path}")
-
-    # =========================================================================
-    # STEP 5: NORMALIZE TRAINING DATA AND PREPARE ARRAYS
-    # =========================================================================
-    logger.info("\n" + "=" * 80)
-    logger.info("STEP 5: NORMALIZING TRAINING DATA")
+    logger.info("STEP 5: NORMALIZING AND PREPARING TRAINING DATA")
     logger.info("=" * 80)
 
     try:
-        # Extract gene columns from training data
-        gene_columns = [col for col in train_df.columns if col.startswith('GENE_')]
-        # Use float32 to reduce memory usage (3.41 GiB -> ~1.7 GiB)
-        X_train_genes = train_df[gene_columns].values.astype(np.float32)
-
-        # Normalize gene expression (StandardScaler - zero mean, unit variance)
+        # Get gene expression for training cell lines
+        train_expr = gene_expr_filtered.loc[gene_expr_filtered.index.isin(train_cell_lines)]
+        
+        # Fit scaler on training data
         from sklearn.preprocessing import StandardScaler
         scaler = StandardScaler()
-        X_train_genes_normalized = scaler.fit_transform(X_train_genes).astype(np.float32)
+        train_expr_normalized = scaler.fit_transform(train_expr.values.astype(np.float32))
+        
+        # Create training data arrays
+        X_train_list = []
+        y_train_ic50_list = []
+        y_train_auc_list = []
+        drug_ids_train_list = []
+        cosmic_ids_train_list = []
 
-        # Extract drug IDs
-        drug_ids_train = train_df['DRUG_ID'].values
+        for cosmic_id in train_cell_lines:
+            if cosmic_id not in train_expr.index:
+                continue
+            
+            # Get gene expression for this cell line
+            cell_idx = train_expr.index.get_loc(cosmic_id)
+            cell_expr = train_expr_normalized[cell_idx]
+            
+            # Get all drug responses for this cell line
+            cell_drugs = train_drug_response[train_drug_response['COSMIC_ID'] == cosmic_id]
+            
+            for _, row in cell_drugs.iterrows():
+                X_train_list.append(np.append(cell_expr, row['DRUG_ID']))
+                y_train_ic50_list.append(row['LN_IC50'])
+                y_train_auc_list.append(row['AUC'])
+                drug_ids_train_list.append(row['DRUG_ID'])
+                cosmic_ids_train_list.append(cosmic_id)
 
-        # Prepare features: [gene_expression, drug_id]
-        X_train = np.column_stack([X_train_genes_normalized, drug_ids_train])
+        X_train = np.array(X_train_list, dtype=np.float32)
+        y_train_ic50 = np.array(y_train_ic50_list, dtype=np.float32)
+        y_train_auc = np.array(y_train_auc_list, dtype=np.float32)
+        drug_ids_train = np.array(drug_ids_train_list)
+        cosmic_ids_train = np.array(cosmic_ids_train_list)
 
-        # Extract targets
-        y_train_ic50 = train_df['LN_IC50'].values
-        y_train_auc = train_df['AUC'].values
-
-        selected_genes = gene_columns
-
-        logger.info(f"✓ Training data normalized:")
+        logger.info(f"✓ Training data prepared:")
         logger.info(f"  - Features shape: {X_train.shape}")
         logger.info(f"  - IC50 targets: {y_train_ic50.shape}")
         logger.info(f"  - AUC targets: {y_train_auc.shape}")
-        logger.info(f"  - Number of genes: {len(selected_genes)}")
         logger.info(f"  - Unique drugs: {len(np.unique(drug_ids_train))}")
+        logger.info(f"  - Unique cell lines: {len(np.unique(cosmic_ids_train))}")
+
+        # Free memory
+        del X_train_list, y_train_ic50_list, y_train_auc_list, drug_ids_train_list, cosmic_ids_train_list
+        del train_drug_response, train_expr_normalized
+        gc.collect()
 
     except Exception as e:
-        logger.error(f"Failed to normalize training data: {e}")
+        logger.error(f"Failed to prepare training data: {e}")
         import traceback
         traceback.print_exc()
         sys.exit(1)
@@ -251,45 +260,71 @@ def main():
     # STEP 6: NORMALIZE TEST DATA
     # =========================================================================
     logger.info("\n" + "=" * 80)
-    logger.info("STEP 6: NORMALIZING TEST DATA")
+    logger.info("STEP 6: NORMALIZING AND PREPARING TEST DATA")
     logger.info("=" * 80)
-    logger.info("Using fitted scaler from training data (no data leakage!)")
+    logger.info("Using scaler fitted on training data (no data leakage!)")
 
     try:
-        # Extract gene columns from test data (same columns as training)
-        # Use float32 to reduce memory usage (3.41 GiB -> ~1.7 GiB)
-        X_test_genes = test_df[gene_columns].values.astype(np.float32)
+        # Get gene expression for test cell lines
+        test_expr = gene_expr_filtered.loc[gene_expr_filtered.index.isin(test_cell_lines)]
+        
+        # Transform test data using training scaler
+        test_expr_normalized = scaler.transform(test_expr.values.astype(np.float32))
+        
+        # Create test data arrays
+        X_test_list = []
+        y_test_ic50_list = []
+        y_test_auc_list = []
+        drug_ids_test_list = []
+        cosmic_ids_test_list = []
 
-        # Normalize using training scaler (no data leakage!)
-        X_test_genes_normalized = scaler.transform(X_test_genes).astype(np.float32)
+        for cosmic_id in test_cell_lines:
+            if cosmic_id not in test_expr.index:
+                continue
+            
+            # Get gene expression for this cell line
+            cell_idx = test_expr.index.get_loc(cosmic_id)
+            cell_expr = test_expr_normalized[cell_idx]
+            
+            # Get all drug responses for this cell line
+            cell_drugs = test_drug_response[test_drug_response['COSMIC_ID'] == cosmic_id]
+            
+            for _, row in cell_drugs.iterrows():
+                X_test_list.append(np.append(cell_expr, row['DRUG_ID']))
+                y_test_ic50_list.append(row['LN_IC50'])
+                y_test_auc_list.append(row['AUC'])
+                drug_ids_test_list.append(row['DRUG_ID'])
+                cosmic_ids_test_list.append(cosmic_id)
 
-        # Extract drug IDs
-        drug_ids_test = test_df['DRUG_ID'].values
+        X_test = np.array(X_test_list, dtype=np.float32)
+        y_test_ic50 = np.array(y_test_ic50_list, dtype=np.float32)
+        y_test_auc = np.array(y_test_auc_list, dtype=np.float32)
+        drug_ids_test = np.array(drug_ids_test_list)
+        cosmic_ids_test = np.array(cosmic_ids_test_list)
 
-        # Prepare features: [gene_expression, drug_id]
-        X_test = np.column_stack([X_test_genes_normalized, drug_ids_test])
-
-        # Extract targets
-        y_test_ic50 = test_df['LN_IC50'].values
-        y_test_auc = test_df['AUC'].values
-
-        logger.info(f"✓ Test data normalized:")
+        logger.info(f"✓ Test data prepared:")
         logger.info(f"  - Features shape: {X_test.shape}")
         logger.info(f"  - IC50 targets: {y_test_ic50.shape}")
         logger.info(f"  - AUC targets: {y_test_auc.shape}")
         logger.info(f"  - Unique drugs: {len(np.unique(drug_ids_test))}")
+        logger.info(f"  - Unique cell lines: {len(np.unique(cosmic_ids_test))}")
+
+        # Free memory
+        del X_test_list, y_test_ic50_list, y_test_auc_list, drug_ids_test_list, cosmic_ids_test_list
+        del test_drug_response, test_expr_normalized, gene_expr_filtered
+        gc.collect()
 
     except Exception as e:
-        logger.error(f"Failed to normalize test data: {e}")
+        logger.error(f"Failed to prepare test data: {e}")
         import traceback
         traceback.print_exc()
         sys.exit(1)
 
     # =========================================================================
-    # STEP 6: SAVE PREPROCESSED DATA
+    # STEP 7: SAVE PREPROCESSED DATA
     # =========================================================================
     logger.info("\n" + "=" * 80)
-    logger.info("STEP 6: SAVING PREPROCESSED DATA")
+    logger.info("STEP 7: SAVING PREPROCESSED DATA")
     logger.info("=" * 80)
 
     # Create output directory
@@ -301,6 +336,7 @@ def main():
         'y_train_ic50': y_train_ic50,
         'y_train_auc': y_train_auc,
         'drug_ids_train': drug_ids_train,
+        'cosmic_ids_train': cosmic_ids_train,  # For cell line-based validation split
         'selected_genes': selected_genes
     }
 
@@ -313,7 +349,8 @@ def main():
         'X_test': X_test,
         'y_test_ic50': y_test_ic50,
         'y_test_auc': y_test_auc,
-        'drug_ids_test': drug_ids_test
+        'drug_ids_test': drug_ids_test,
+        'cosmic_ids_test': cosmic_ids_test  # Added for completeness
     }
 
     test_path = PROCESSED_DATA_DIR / 'test_data.npz'
@@ -335,23 +372,26 @@ def main():
     logger.info(f"✓ Gene names saved to: {gene_names_path}")
 
     # =========================================================================
-    # STEP 7: SUMMARY STATISTICS
+    # STEP 8: SUMMARY STATISTICS
     # =========================================================================
     logger.info("\n" + "=" * 80)
     logger.info("SUMMARY")
     logger.info("=" * 80)
 
     logger.info("\nDataset Statistics:")
-    logger.info(f"  Total samples: {len(merged_df):,}")
     logger.info(f"  Training samples: {len(X_train):,}")
     logger.info(f"  Test samples: {len(X_test):,}")
     logger.info(f"  Train/test split: {len(X_train)/(len(X_train)+len(X_test))*100:.1f}% / {len(X_test)/(len(X_train)+len(X_test))*100:.1f}%")
 
     logger.info("\nFeature Statistics:")
-    logger.info(f"  Original genes: {gene_expr_df.shape[1]:,}")
     logger.info(f"  Selected genes: {len(selected_genes):,}")
-    logger.info(f"  Unique drugs (after filtering): {len(np.unique(drug_ids_train)):,}")
+    logger.info(f"  Unique drugs (train): {len(np.unique(drug_ids_train)):,}")
+    logger.info(f"  Unique drugs (test): {len(np.unique(drug_ids_test)):,}")
     logger.info(f"  Total features: {X_train.shape[1]:,}")
+
+    logger.info("\nCell Line Statistics:")
+    logger.info(f"  Train cell lines: {len(train_cell_lines):,}")
+    logger.info(f"  Test cell lines: {len(test_cell_lines):,}")
 
     logger.info("\nTarget Statistics (Training Set):")
     logger.info(f"  IC50 (log-scale):")
@@ -367,8 +407,11 @@ def main():
     logger.info(f"    - Max: {y_train_auc.max():.3f}")
 
     logger.info("\n" + "=" * 80)
-    logger.info("✓ PREPROCESSING COMPLETE!")
+    logger.info("✓ PREPROCESSING COMPLETE - NO DATA LEAKAGE!")
     logger.info("=" * 80)
+    logger.info("  - Gene selection: Based on TRAINING cell lines only")
+    logger.info("  - Normalization: Fitted on TRAINING data only")
+    logger.info("  - Cell lines: No overlap between train and test")
     logger.info("\nNext steps:")
     logger.info("  1. Train models: python scripts/02_train_models.py")
     logger.info("  2. Evaluate models: python scripts/03_evaluate_models.py")

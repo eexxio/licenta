@@ -78,6 +78,7 @@ def load_preprocessed_data():
         'y_train_ic50': train_data['y_train_ic50'],
         'y_train_auc': train_data['y_train_auc'],
         'drug_ids_train': train_data['drug_ids_train'],
+        'cosmic_ids_train': train_data['cosmic_ids_train'],  # Cell line IDs for validation split
         'selected_genes': train_data['selected_genes'],
         'X_test': test_data['X_test'],
         'y_test_ic50': test_data['y_test_ic50'],
@@ -94,50 +95,118 @@ def load_preprocessed_data():
     return data
 
 
-def create_validation_split(X_train, y_train, drug_ids_train, val_size=0.2):
+def create_validation_split(X_train, y_train, drug_ids_train, cosmic_ids_train, val_size=0.2):
     """
-    Create validation set from training data.
+    Create validation set from training data BY CELL LINE to avoid data leakage.
+
+    CRITICAL: We split by cell line, not randomly, to ensure no cell line
+    appears in both training and validation sets. This prevents data leakage
+    where the model could memorize cell line-specific patterns.
 
     For XGBoost and Neural Network early stopping.
     """
-    logger.info(f"Creating validation split ({val_size*100:.0f}% of training data)...")
+    logger.info(f"Creating validation split BY CELL LINE ({val_size*100:.0f}% of training data)...")
+    logger.info("CRITICAL: Splitting by cell line to prevent data leakage!")
 
-    from sklearn.model_selection import train_test_split
+    # Get unique cell lines
+    unique_cell_lines = np.unique(cosmic_ids_train)
+    n_cell_lines = len(unique_cell_lines)
+    n_val_cell_lines = int(n_cell_lines * val_size)
 
-    X_tr, X_val, y_tr, y_val, drug_tr, drug_val = train_test_split(
-        X_train,
-        y_train,
-        drug_ids_train,
-        test_size=val_size,
-        random_state=RANDOM_SEED
-    )
+    logger.info(f"  - Total cell lines: {n_cell_lines}")
+    logger.info(f"  - Validation cell lines: {n_val_cell_lines}")
 
-    logger.info(f"  - Training: {len(X_tr):,} samples")
-    logger.info(f"  - Validation: {len(X_val):,} samples")
+    # Shuffle and split cell lines
+    np.random.seed(RANDOM_SEED)
+    shuffled_cell_lines = np.random.permutation(unique_cell_lines)
+    val_cell_lines = set(shuffled_cell_lines[:n_val_cell_lines])
+    train_cell_lines = set(shuffled_cell_lines[n_val_cell_lines:])
+
+    # Create masks for training and validation
+    val_mask = np.array([cid in val_cell_lines for cid in cosmic_ids_train])
+    train_mask = ~val_mask
+
+    # Split data
+    X_tr = X_train[train_mask]
+    X_val = X_train[val_mask]
+    y_tr = y_train[train_mask]
+    y_val = y_train[val_mask]
+    drug_tr = drug_ids_train[train_mask]
+    drug_val = drug_ids_train[val_mask]
+
+    logger.info(f"  - Training: {len(X_tr):,} samples from {len(train_cell_lines)} cell lines")
+    logger.info(f"  - Validation: {len(X_val):,} samples from {len(val_cell_lines)} cell lines")
+    logger.info("  - ✓ No cell line overlap between training and validation!")
 
     return X_tr, X_val, y_tr, y_val, drug_tr, drug_val
 
 
-def train_random_forest(X_train, y_train, target_name, exp_dir):
-    """Train Random Forest model."""
+def create_drug_one_hot(drug_ids, unique_drugs):
+    """
+    Create one-hot encoding for drug IDs.
+    
+    This allows tree-based models (RF, XGBoost) to use drug information,
+    making the comparison with Neural Networks fair.
+    
+    Args:
+        drug_ids: Array of drug IDs
+        unique_drugs: Array of all unique drug IDs (defines the encoding)
+    
+    Returns:
+        One-hot encoded drug features (n_samples, n_drugs)
+    """
+    drug_to_idx = {drug: idx for idx, drug in enumerate(unique_drugs)}
+    n_samples = len(drug_ids)
+    n_drugs = len(unique_drugs)
+    
+    one_hot = np.zeros((n_samples, n_drugs), dtype=np.float32)
+    for i, drug_id in enumerate(drug_ids):
+        if drug_id in drug_to_idx:
+            one_hot[i, drug_to_idx[drug_id]] = 1.0
+    
+    return one_hot
+
+
+def train_random_forest(X_train, y_train, drug_ids_train, unique_drugs, target_name, exp_dir):
+    """Train Random Forest model with drug one-hot encoding."""
     logger.info(f"\nTraining Random Forest ({target_name})...")
 
+    # Get gene expression features (exclude last column which is drug ID)
+    X_genes = X_train[:, :-1]
+    
+    # Create one-hot encoding for drug IDs
+    # This gives RF the same drug information that NN gets via embeddings
+    drug_one_hot = create_drug_one_hot(drug_ids_train, unique_drugs)
+    logger.info(f"  Drug one-hot encoding shape: {drug_one_hot.shape}")
+    
+    # Combine gene features with drug one-hot encoding
+    X_train_with_drugs = np.hstack([X_genes, drug_one_hot])
+    logger.info(f"  Total features: {X_train_with_drugs.shape[1]} (genes: {X_genes.shape[1]}, drugs: {drug_one_hot.shape[1]})")
+    
     # Random Forest doesn't use validation set
     # Use GPU if configured and available
     model = RandomForestModel(use_gpu=USE_GPU_RF)
-    model.fit(X_train, y_train)
+    model.fit(X_train_with_drugs, y_train)
 
     # Save model
     model_path = exp_dir / "model.pkl"
     model.save(str(model_path))
     logger.info(f"✓ Model saved to: {model_path}")
 
+    # Save unique drugs for inference
+    unique_drugs_path = exp_dir / "unique_drugs.json"
+    with open(unique_drugs_path, 'w') as f:
+        json.dump([int(d) for d in unique_drugs], f)
+    logger.info(f"✓ Unique drugs saved to: {unique_drugs_path}")
+
     # Save config
     config = {
         'model_type': 'RandomForest',
         'target': target_name,
         'n_samples': len(X_train),
-        'n_features': X_train.shape[1],
+        'n_gene_features': X_genes.shape[1],
+        'n_drug_features': len(unique_drugs),
+        'n_total_features': X_train_with_drugs.shape[1],
         'random_seed': RANDOM_SEED,
         'trained_at': datetime.now().isoformat()
     }
@@ -149,12 +218,27 @@ def train_random_forest(X_train, y_train, target_name, exp_dir):
     return model
 
 
-def train_xgboost(X_train, y_train, X_val, y_val, target_name, exp_dir):
-    """Train XGBoost model with early stopping."""
+def train_xgboost(X_train, y_train, X_val, y_val, drug_ids_train, drug_ids_val, unique_drugs, target_name, exp_dir):
+    """Train XGBoost model with early stopping and drug one-hot encoding."""
     logger.info(f"\nTraining XGBoost ({target_name})...")
 
+    # Get gene expression features (exclude last column which is drug ID)
+    X_train_genes = X_train[:, :-1]
+    X_val_genes = X_val[:, :-1]
+    
+    # Create one-hot encoding for drug IDs
+    # This gives XGBoost the same drug information that NN gets via embeddings
+    train_drug_one_hot = create_drug_one_hot(drug_ids_train, unique_drugs)
+    val_drug_one_hot = create_drug_one_hot(drug_ids_val, unique_drugs)
+    logger.info(f"  Drug one-hot encoding shape: {train_drug_one_hot.shape}")
+    
+    # Combine gene features with drug one-hot encoding
+    X_train_with_drugs = np.hstack([X_train_genes, train_drug_one_hot])
+    X_val_with_drugs = np.hstack([X_val_genes, val_drug_one_hot])
+    logger.info(f"  Total features: {X_train_with_drugs.shape[1]} (genes: {X_train_genes.shape[1]}, drugs: {train_drug_one_hot.shape[1]})")
+
     model = XGBoostModel()
-    model.fit(X_train, y_train, X_val=X_val, y_val=y_val)
+    model.fit(X_train_with_drugs, y_train, X_val=X_val_with_drugs, y_val=y_val)
 
     # Save model
     model_path = exp_dir / "model.pkl"
@@ -167,13 +251,21 @@ def train_xgboost(X_train, y_train, X_val, y_val, target_name, exp_dir):
     with open(history_path, 'w') as f:
         json.dump(history, f, indent=2)
 
+    # Save unique drugs for inference
+    unique_drugs_path = exp_dir / "unique_drugs.json"
+    with open(unique_drugs_path, 'w') as f:
+        json.dump([int(d) for d in unique_drugs], f)
+    logger.info(f"✓ Unique drugs saved to: {unique_drugs_path}")
+
     # Save config
     config = {
         'model_type': 'XGBoost',
         'target': target_name,
         'n_samples_train': len(X_train),
         'n_samples_val': len(X_val),
-        'n_features': X_train.shape[1],
+        'n_gene_features': X_train_genes.shape[1],
+        'n_drug_features': len(unique_drugs),
+        'n_total_features': X_train_with_drugs.shape[1],
         'random_seed': RANDOM_SEED,
         'trained_at': datetime.now().isoformat()
     }
@@ -189,7 +281,7 @@ def train_xgboost(X_train, y_train, X_val, y_val, target_name, exp_dir):
 
 
 def train_neural_network(X_train, y_train, drug_ids_train, X_val, y_val, drug_ids_val,
-                        n_drugs, target_name, exp_dir):
+                        n_drugs, target_name, exp_dir, drug_id_mapping=None):
     """Train Neural Network model with early stopping."""
     logger.info(f"\nTraining Neural Network ({target_name})...")
 
@@ -197,9 +289,18 @@ def train_neural_network(X_train, y_train, drug_ids_train, X_val, y_val, drug_id
 
     model = NeuralNetworkModel(n_genes=n_genes, n_drugs=n_drugs)
 
+    # Map drug IDs to 0-indexed values for embedding layer
+    # The embedding layer expects indices in range [0, n_drugs-1]
+    if drug_id_mapping is not None:
+        drug_ids_train_mapped = np.array([drug_id_mapping[d] for d in drug_ids_train])
+        drug_ids_val_mapped = np.array([drug_id_mapping[d] for d in drug_ids_val])
+    else:
+        drug_ids_train_mapped = drug_ids_train
+        drug_ids_val_mapped = drug_ids_val
+
     # Prepare data with drug IDs
-    X_train_with_drugs = np.column_stack([X_train[:, :-1], drug_ids_train])
-    X_val_with_drugs = np.column_stack([X_val[:, :-1], drug_ids_val])
+    X_train_with_drugs = np.column_stack([X_train[:, :-1], drug_ids_train_mapped])
+    X_val_with_drugs = np.column_stack([X_val[:, :-1], drug_ids_val_mapped])
 
     model.fit(
         X_train_with_drugs,
@@ -215,12 +316,21 @@ def train_neural_network(X_train, y_train, drug_ids_train, X_val, y_val, drug_id
 
     # Save training history
     history = {
-        'train_losses': [float(x) for x in model.train_losses],
-        'val_losses': [float(x) for x in model.val_losses]
+        'train_losses': [float(x) for x in model.history['train_loss']],
+        'val_losses': [float(x) for x in model.history['val_loss']]
     }
     history_path = exp_dir / "training_history.json"
     with open(history_path, 'w') as f:
         json.dump(history, f, indent=2)
+
+    # Save drug ID mapping for inference
+    if drug_id_mapping is not None:
+        mapping_path = exp_dir / "drug_id_mapping.json"
+        # Convert keys to strings for JSON serialization
+        mapping_for_json = {str(k): v for k, v in drug_id_mapping.items()}
+        with open(mapping_path, 'w') as f:
+            json.dump(mapping_for_json, f, indent=2)
+        logger.info(f"✓ Drug ID mapping saved to: {mapping_path}")
 
     # Save config
     config = {
@@ -232,8 +342,8 @@ def train_neural_network(X_train, y_train, drug_ids_train, X_val, y_val, drug_id
         'n_drugs': n_drugs,
         'random_seed': RANDOM_SEED,
         'trained_at': datetime.now().isoformat(),
-        'epochs_trained': len(model.train_losses),
-        'best_epoch': int(np.argmin(model.val_losses)) if model.val_losses else 0
+        'epochs_trained': len(model.history['train_loss']),
+        'best_epoch': int(np.argmin(model.history['val_loss'])) if model.history['val_loss'] else 0
     }
 
     config_path = exp_dir / "config.json"
@@ -272,24 +382,30 @@ def main():
     y_train_ic50_full = data['y_train_ic50']
     y_train_auc_full = data['y_train_auc']
     drug_ids_train_full = data['drug_ids_train']
+    cosmic_ids_train_full = data['cosmic_ids_train']  # Cell line IDs for validation split
 
-    n_drugs = len(np.unique(drug_ids_train_full))
+    # Create drug ID to 0-indexed mapping for neural network embedding layer
+    # The embedding layer expects indices in range [0, n_drugs-1]
+    unique_drugs = np.unique(drug_ids_train_full)
+    n_drugs = len(unique_drugs)
+    drug_id_mapping = {drug_id: idx for idx, drug_id in enumerate(unique_drugs)}
     logger.info(f"\nNumber of unique drugs: {n_drugs}")
+    logger.info(f"Drug ID range: {unique_drugs.min()} - {unique_drugs.max()} -> mapped to 0-{n_drugs-1}")
 
     # =========================================================================
-    # STEP 2: CREATE VALIDATION SPLIT
+    # STEP 2: CREATE VALIDATION SPLIT (BY CELL LINE TO PREVENT DATA LEAKAGE)
     # =========================================================================
     logger.info("\n" + "=" * 80)
-    logger.info("STEP 2: CREATING VALIDATION SPLIT")
+    logger.info("STEP 2: CREATING VALIDATION SPLIT (BY CELL LINE)")
     logger.info("=" * 80)
 
     # For IC50
     X_train_ic50, X_val_ic50, y_train_ic50, y_val_ic50, drug_train_ic50, drug_val_ic50 = \
-        create_validation_split(X_train_full, y_train_ic50_full, drug_ids_train_full)
+        create_validation_split(X_train_full, y_train_ic50_full, drug_ids_train_full, cosmic_ids_train_full)
 
     # For AUC
     X_train_auc, X_val_auc, y_train_auc, y_val_auc, drug_train_auc, drug_val_auc = \
-        create_validation_split(X_train_full, y_train_auc_full, drug_ids_train_full)
+        create_validation_split(X_train_full, y_train_auc_full, drug_ids_train_full, cosmic_ids_train_full)
 
     # =========================================================================
     # STEP 3: TRAIN RANDOM FOREST MODELS
@@ -301,14 +417,22 @@ def main():
     # Random Forest (IC50)
     rf_ic50_dir = get_experiment_dir("random_forest", "IC50")
     rf_ic50_dir.mkdir(parents=True, exist_ok=True)
-    rf_ic50_model = train_random_forest(X_train_full, y_train_ic50_full, "IC50", rf_ic50_dir)
+    rf_ic50_model_path = rf_ic50_dir / "model.pkl"
+    if rf_ic50_model_path.exists():
+        logger.info(f"\n⏭ Skipping Random Forest (IC50) - model already exists: {rf_ic50_model_path}")
+    else:
+        rf_ic50_model = train_random_forest(X_train_full, y_train_ic50_full, drug_ids_train_full, unique_drugs, "IC50", rf_ic50_dir)
 
     # Random Forest (AUC)
     rf_auc_dir = get_experiment_dir("random_forest", "AUC")
     rf_auc_dir.mkdir(parents=True, exist_ok=True)
-    rf_auc_model = train_random_forest(X_train_full, y_train_auc_full, "AUC", rf_auc_dir)
+    rf_auc_model_path = rf_auc_dir / "model.pkl"
+    if rf_auc_model_path.exists():
+        logger.info(f"\n⏭ Skipping Random Forest (AUC) - model already exists: {rf_auc_model_path}")
+    else:
+        rf_auc_model = train_random_forest(X_train_full, y_train_auc_full, drug_ids_train_full, unique_drugs, "AUC", rf_auc_dir)
 
-    logger.info("\n✓ Random Forest models trained successfully!")
+    logger.info("\n✓ Random Forest models done!")
 
     # =========================================================================
     # STEP 4: TRAIN XGBOOST MODELS
@@ -320,22 +444,32 @@ def main():
     # XGBoost (IC50)
     xgb_ic50_dir = get_experiment_dir("xgboost", "IC50")
     xgb_ic50_dir.mkdir(parents=True, exist_ok=True)
-    xgb_ic50_model = train_xgboost(
-        X_train_ic50, y_train_ic50,
-        X_val_ic50, y_val_ic50,
-        "IC50", xgb_ic50_dir
-    )
+    xgb_ic50_model_path = xgb_ic50_dir / "model.pkl"
+    if xgb_ic50_model_path.exists():
+        logger.info(f"\n⏭ Skipping XGBoost (IC50) - model already exists: {xgb_ic50_model_path}")
+    else:
+        xgb_ic50_model = train_xgboost(
+            X_train_ic50, y_train_ic50,
+            X_val_ic50, y_val_ic50,
+            drug_train_ic50, drug_val_ic50, unique_drugs,
+            "IC50", xgb_ic50_dir
+        )
 
     # XGBoost (AUC)
     xgb_auc_dir = get_experiment_dir("xgboost", "AUC")
     xgb_auc_dir.mkdir(parents=True, exist_ok=True)
-    xgb_auc_model = train_xgboost(
-        X_train_auc, y_train_auc,
-        X_val_auc, y_val_auc,
-        "AUC", xgb_auc_dir
-    )
+    xgb_auc_model_path = xgb_auc_dir / "model.pkl"
+    if xgb_auc_model_path.exists():
+        logger.info(f"\n⏭ Skipping XGBoost (AUC) - model already exists: {xgb_auc_model_path}")
+    else:
+        xgb_auc_model = train_xgboost(
+            X_train_auc, y_train_auc,
+            X_val_auc, y_val_auc,
+            drug_train_auc, drug_val_auc, unique_drugs,
+            "AUC", xgb_auc_dir
+        )
 
-    logger.info("\n✓ XGBoost models trained successfully!")
+    logger.info("\n✓ XGBoost models done!")
 
     # =========================================================================
     # STEP 5: TRAIN NEURAL NETWORK MODELS
@@ -347,22 +481,30 @@ def main():
     # Neural Network (IC50)
     nn_ic50_dir = get_experiment_dir("neural_network", "IC50")
     nn_ic50_dir.mkdir(parents=True, exist_ok=True)
-    nn_ic50_model = train_neural_network(
-        X_train_ic50, y_train_ic50, drug_train_ic50,
-        X_val_ic50, y_val_ic50, drug_val_ic50,
-        n_drugs, "IC50", nn_ic50_dir
-    )
+    nn_ic50_model_path = nn_ic50_dir / "model.pt"
+    if nn_ic50_model_path.exists():
+        logger.info(f"\n⏭ Skipping Neural Network (IC50) - model already exists: {nn_ic50_model_path}")
+    else:
+        nn_ic50_model = train_neural_network(
+            X_train_ic50, y_train_ic50, drug_train_ic50,
+            X_val_ic50, y_val_ic50, drug_val_ic50,
+            n_drugs, "IC50", nn_ic50_dir, drug_id_mapping
+        )
 
     # Neural Network (AUC)
     nn_auc_dir = get_experiment_dir("neural_network", "AUC")
     nn_auc_dir.mkdir(parents=True, exist_ok=True)
-    nn_auc_model = train_neural_network(
-        X_train_auc, y_train_auc, drug_train_auc,
-        X_val_auc, y_val_auc, drug_val_auc,
-        n_drugs, "AUC", nn_auc_dir
-    )
+    nn_auc_model_path = nn_auc_dir / "model.pt"
+    if nn_auc_model_path.exists():
+        logger.info(f"\n⏭ Skipping Neural Network (AUC) - model already exists: {nn_auc_model_path}")
+    else:
+        nn_auc_model = train_neural_network(
+            X_train_auc, y_train_auc, drug_train_auc,
+            X_val_auc, y_val_auc, drug_val_auc,
+            n_drugs, "AUC", nn_auc_dir, drug_id_mapping
+        )
 
-    logger.info("\n✓ Neural Network models trained successfully!")
+    logger.info("\n✓ Neural Network models done!")
 
     # =========================================================================
     # STEP 6: SUMMARY

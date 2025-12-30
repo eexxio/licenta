@@ -233,11 +233,15 @@ class NeuralNetworkModel(BaseModel):
         self.max_epochs = config['max_epochs']
         self.early_stopping_patience = config['early_stopping_patience']
 
-        # Device (GPU if available)
-        self.device = torch.device(
-            'cuda' if torch.cuda.is_available() and config['device'] == 'cuda'
-            else 'cpu'
-        )
+        # Device (GPU if available) - always try to use CUDA if available
+        if torch.cuda.is_available():
+            self.device = torch.device('cuda')
+            logger.info(f"✓ CUDA available! Using GPU: {torch.cuda.get_device_name(0)}")
+            logger.info(f"  GPU Memory: {torch.cuda.get_device_properties(0).total_memory / 1e9:.1f} GB")
+        else:
+            self.device = torch.device('cpu')
+            logger.warning("CUDA not available, using CPU (training will be slower)")
+        
         self.model.to(self.device)
 
         # Optimizer and scheduler
@@ -491,6 +495,7 @@ class NeuralNetworkModel(BaseModel):
         if not self.is_fitted:
             logger.warning("Saving unfitted model!")
 
+        path = Path(path)
         path.parent.mkdir(parents=True, exist_ok=True)
 
         # Save model state and metadata

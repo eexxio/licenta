@@ -63,7 +63,7 @@ def compute_rmse(y_true: np.ndarray, y_pred: np.ndarray) -> float:
     Returns:
         RMSE score
     """
-    return mean_squared_error(y_true, y_pred, squared=False)
+    return np.sqrt(mean_squared_error(y_true, y_pred))
 
 
 def compute_mae(y_true: np.ndarray, y_pred: np.ndarray) -> float:

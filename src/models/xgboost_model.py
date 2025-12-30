@@ -5,7 +5,7 @@ XGBoost (eXtreme Gradient Boosting) is a state-of-the-art gradient boosting algo
 - Often achieves the best performance on tabular data
 - Supports early stopping (stops training when validation performance plateaus)
 - Provides feature importance
-- Can use GPU acceleration
+- Can use GPU acceleration (enabled by default if CUDA available)
 
 This is likely to be your best-performing model!
 
@@ -25,6 +25,31 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 
+def check_gpu_available():
+    """Check if GPU is available for XGBoost."""
+    try:
+        import torch
+        if torch.cuda.is_available():
+            logger.info(f"GPU available: {torch.cuda.get_device_name(0)}")
+            return True
+    except ImportError:
+        pass
+    
+    # Alternative check without PyTorch
+    try:
+        # Try creating a small GPU model to check
+        import subprocess
+        result = subprocess.run(['nvidia-smi'], capture_output=True, text=True)
+        if result.returncode == 0:
+            logger.info("NVIDIA GPU detected via nvidia-smi")
+            return True
+    except Exception:
+        pass
+    
+    logger.info("No GPU detected, using CPU")
+    return False
+
+
 class XGBoostModel(BaseModel):
     """
     XGBoost model for drug response prediction.
@@ -34,6 +59,7 @@ class XGBoostModel(BaseModel):
     - max_depth: 6 (maximum tree depth)
     - n_estimators: 1000 (number of boosting rounds)
     - early_stopping_rounds: 50 (stop if no improvement for 50 rounds)
+    - device: "cuda" (uses GPU if available)
 
     Example:
         >>> from src.models.xgboost_model import XGBoostModel
@@ -63,15 +89,27 @@ class XGBoostModel(BaseModel):
         config = XGB_CONFIG.copy()
         config.update(kwargs)
 
+        # Configure GPU usage
+        gpu_available = check_gpu_available()
+        if gpu_available:
+            config['device'] = 'cuda'
+            config['tree_method'] = 'hist'  # XGBoost 2.0+ uses 'hist' with device='cuda'
+            logger.info("XGBoost configured for GPU training (device='cuda')")
+        else:
+            config['device'] = 'cpu'
+            config['tree_method'] = 'hist'
+            logger.info("XGBoost configured for CPU training")
+
         # Create the XGBoost model
         self.model = xgb.XGBRegressor(**config)
 
         # Store for reference
         self.learning_rate = config['learning_rate']
         self.n_estimators = config['n_estimators']
+        self.device = config['device']
 
         logger.info(f"Created XGBoost with lr={self.learning_rate}, "
-                   f"n_estimators={self.n_estimators}")
+                   f"n_estimators={self.n_estimators}, device={self.device}")
 
     def fit(
         self,

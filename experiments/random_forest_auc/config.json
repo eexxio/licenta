@@ -1,0 +1,10 @@
+{
+  "model_type": "RandomForest",
+  "target": "AUC",
+  "n_samples": 260611,
+  "n_gene_features": 5000,
+  "n_drug_features": 402,
+  "n_total_features": 5402,
+  "random_seed": 42,
+  "trained_at": "2025-12-30T13:24:41.487419"
+}

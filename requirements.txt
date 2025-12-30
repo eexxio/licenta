@@ -4,11 +4,15 @@ pandas>=2.0.0
 scikit-learn>=1.3.0
 scipy>=1.11.0
 
-# Machine Learning - Tree-based
+# Machine Learning - Tree-based (GPU-enabled)
+# Note: For GPU support with XGBoost, use: pip install xgboost --upgrade
+# XGBoost 2.0+ has built-in CUDA support when device="cuda" is set
 xgboost>=2.0.0
 lightgbm>=4.0.0
 
-# Deep Learning - PyTorch
+# Deep Learning - PyTorch with CUDA support
+# For GPU training, install PyTorch with CUDA:
+# pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu121
 torch>=2.0.0
 torchvision>=0.15.0
 torchaudio>=2.0.0

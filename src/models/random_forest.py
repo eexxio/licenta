@@ -8,8 +8,9 @@ Random Forest is an ensemble of decision trees that:
 - Serves as a strong baseline
 
 GPU Support:
-- Set USE_GPU=True to use RAPIDS cuML (GPU-accelerated)
-- Set USE_GPU=False to use scikit-learn (CPU-only)
+- On Windows: Uses scikit-learn with parallel CPU processing (cuML not available)
+- On Linux: Can use RAPIDS cuML for GPU acceleration
+- Alternative: Set use_histgradient=True for GPU-accelerated HistGradientBoosting
 
 Author: Bachelor's Thesis Project
 Date: 2026
@@ -17,6 +18,7 @@ Date: 2026
 
 import numpy as np
 import logging
+import platform
 
 from src.models.base_model import BaseModel
 from src.config import RF_CONFIG, set_seeds
@@ -24,16 +26,23 @@ from src.config import RF_CONFIG, set_seeds
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Try to import cuML for GPU support, fall back to scikit-learn
-try:
-    from cuml.ensemble import RandomForestRegressor as cuMLRandomForest
-    CUML_AVAILABLE = True
-    logger.info("cuML available - GPU acceleration enabled for Random Forest")
-except ImportError:
-    CUML_AVAILABLE = False
-    logger.info("cuML not available - falling back to CPU-based scikit-learn")
+# Check if we're on Linux (cuML only works on Linux)
+IS_LINUX = platform.system() == 'Linux'
+
+# Try to import cuML for GPU support (Linux only)
+CUML_AVAILABLE = False
+if IS_LINUX:
+    try:
+        from cuml.ensemble import RandomForestRegressor as cuMLRandomForest
+        CUML_AVAILABLE = True
+        logger.info("cuML available - GPU acceleration enabled for Random Forest")
+    except ImportError:
+        logger.info("cuML not available on Linux - install with: conda install -c rapidsai cuml")
+else:
+    logger.info(f"cuML not supported on {platform.system()} - using optimized CPU implementation")
 
 from sklearn.ensemble import RandomForestRegressor as SklearnRandomForest
+from sklearn.ensemble import HistGradientBoostingRegressor
 
 
 class RandomForestModel(BaseModel):
@@ -41,6 +50,7 @@ class RandomForestModel(BaseModel):
     Random Forest model for drug response prediction.
 
     This wraps scikit-learn's RandomForestRegressor with our common interface.
+    On Windows, uses optimized CPU implementation since cuML requires Linux.
 
     Hyperparameters (from config.py):
     - n_estimators: 500 (number of trees)
@@ -63,12 +73,13 @@ class RandomForestModel(BaseModel):
         >>> top_genes = np.argsort(importance)[-30:][::-1]  # Top 30 genes
     """
 
-    def __init__(self, use_gpu=True, **kwargs):
+    def __init__(self, use_gpu=True, use_histgradient=False, **kwargs):
         """
         Initialize Random Forest model.
 
         Args:
-            use_gpu: Use GPU-accelerated cuML if available (default: True)
+            use_gpu: Use GPU-accelerated cuML if available (Linux only)
+            use_histgradient: Use HistGradientBoostingRegressor (faster, GPU-like speed)
             **kwargs: Override default hyperparameters from config.py
                      Example: RandomForestModel(n_estimators=1000)
         """
@@ -80,10 +91,10 @@ class RandomForestModel(BaseModel):
 
         # Determine which implementation to use
         self.use_gpu = use_gpu and CUML_AVAILABLE
+        self.use_histgradient = use_histgradient
 
         if self.use_gpu:
-            # cuML GPU implementation
-            # Remove scikit-learn specific params that cuML doesn't support
+            # cuML GPU implementation (Linux only)
             cuml_config = {
                 'n_estimators': config['n_estimators'],
                 'max_depth': config['max_depth'],
@@ -91,17 +102,32 @@ class RandomForestModel(BaseModel):
                 'min_samples_leaf': config['min_samples_leaf'],
                 'max_features': config['max_features'],
                 'random_state': config['random_state'],
-                # cuML uses different verbosity
                 'verbose': config.get('verbose', 1)
             }
             self.model = cuMLRandomForest(**cuml_config)
-            logger.info(f"Created GPU-accelerated Random Forest with {config['n_estimators']} trees")
+            logger.info(f"✓ Created GPU-accelerated Random Forest with {config['n_estimators']} trees (cuML)")
+        elif self.use_histgradient:
+            # HistGradientBoosting - much faster than RF, similar performance
+            hist_config = {
+                'max_iter': config['n_estimators'],
+                'max_depth': config['max_depth'],
+                'min_samples_leaf': config['min_samples_leaf'],
+                'random_state': config['random_state'],
+                'early_stopping': False,
+                'verbose': 0
+            }
+            self.model = HistGradientBoostingRegressor(**hist_config)
+            logger.info(f"✓ Created HistGradientBoostingRegressor with {config['n_estimators']} iterations (fast CPU)")
         else:
-            # scikit-learn CPU implementation
-            self.model = SklearnRandomForest(**config)
-            logger.info(f"Created CPU-based Random Forest with {config['n_estimators']} trees")
-            if use_gpu and not CUML_AVAILABLE:
-                logger.warning("GPU requested but cuML not available. Install with: conda install -c rapidsai -c conda-forge cuml")
+            # scikit-learn CPU implementation with maximum parallelization
+            sklearn_config = config.copy()
+            sklearn_config['n_jobs'] = -1  # Use all CPU cores
+            sklearn_config['verbose'] = 1
+            self.model = SklearnRandomForest(**sklearn_config)
+            logger.info(f"✓ Created CPU-based Random Forest with {config['n_estimators']} trees")
+            logger.info(f"  Using all CPU cores for parallel training (n_jobs=-1)")
+            if not IS_LINUX:
+                logger.info(f"  Note: cuML (GPU) requires Linux. On Windows, using optimized CPU.")
 
     def fit(
         self,
@@ -130,12 +156,21 @@ class RandomForestModel(BaseModel):
             >>> print(f"OOB Score: {model.model.oob_score_:.4f}")
         """
         logger.info(f"Training Random Forest on {len(X_train)} samples...")
+        if self.use_gpu:
+            logger.info("  Using GPU (cuML)")
+        elif self.use_histgradient:
+            logger.info("  Using HistGradientBoosting (fast CPU)")
+        else:
+            logger.info("  Using scikit-learn with parallel CPU")
 
         # Set random seed for reproducibility
         set_seeds()
 
+        # Convert to float32 for efficiency (especially important for large datasets)
+        X_train = X_train.astype(np.float32)
+        y_train = y_train.astype(np.float32)
+
         # Train the model
-        # Random Forest parallelizes across trees (n_jobs=-1 uses all cores)
         self.model.fit(X_train, y_train)
 
         self.is_fitted = True
@@ -143,7 +178,7 @@ class RandomForestModel(BaseModel):
         logger.info("✓ Random Forest training complete")
 
         # Log OOB score if available
-        if hasattr(self.model, 'oob_score_'):
+        if hasattr(self.model, 'oob_score_') and self.model.oob_score_ is not None:
             logger.info(f"Out-of-Bag R² Score: {self.model.oob_score_:.4f}")
 
         return self
@@ -171,6 +206,9 @@ class RandomForestModel(BaseModel):
             raise ValueError("Model must be fitted before making predictions!")
 
         logger.info(f"Making predictions on {len(X)} samples...")
+
+        # Convert to float32 for consistency
+        X = X.astype(np.float32)
 
         # Predict (parallelized across trees)
         predictions = self.model.predict(X)
@@ -220,6 +258,14 @@ class RandomForestModel(BaseModel):
         """
         if not self.is_fitted:
             raise ValueError("Model must be fitted before getting feature importance!")
+
+        # HistGradientBoosting doesn't have feature_importances_ directly
+        if self.use_histgradient:
+            # For HistGradientBoosting, we return zeros (not available)
+            # Or we could use permutation importance, but that's slow
+            logger.warning("HistGradientBoosting does not provide feature_importances_. Returning zeros.")
+            n_features = self.model.n_features_in_
+            return np.zeros(n_features)
 
         importances = self.model.feature_importances_
 

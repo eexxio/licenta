@@ -81,9 +81,32 @@ def load_preprocessed_data():
     return data
 
 
-def load_model(exp_name, model_type, n_genes=None, n_drugs=None):
+def create_drug_one_hot(drug_ids, unique_drugs):
+    """
+    Create one-hot encoding for drug IDs.
+    
+    Args:
+        drug_ids: Array of drug IDs
+        unique_drugs: Array of all unique drug IDs (defines the encoding)
+    
+    Returns:
+        One-hot encoded drug features (n_samples, n_drugs)
+    """
+    drug_to_idx = {drug: idx for idx, drug in enumerate(unique_drugs)}
+    n_samples = len(drug_ids)
+    n_drugs = len(unique_drugs)
+    
+    one_hot = np.zeros((n_samples, n_drugs), dtype=np.float32)
+    for i, drug_id in enumerate(drug_ids):
+        if drug_id in drug_to_idx:
+            one_hot[i, drug_to_idx[drug_id]] = 1.0
+    
+    return one_hot
+
+
+def load_model(model_type_name, target, model_type, n_genes=None, n_drugs=None):
     """Load a trained model from experiments directory."""
-    exp_dir = get_experiment_dir(exp_name)
+    exp_dir = get_experiment_dir(model_type_name, target)
 
     if not exp_dir.exists():
         raise FileNotFoundError(f"Experiment directory not found: {exp_dir}")
@@ -92,30 +115,81 @@ def load_model(exp_name, model_type, n_genes=None, n_drugs=None):
     if model_type == "RandomForest":
         model_path = exp_dir / "model.pkl"
         model = RandomForestModel.load(str(model_path))
+        
+        # Load unique drugs for one-hot encoding
+        unique_drugs_path = exp_dir / "unique_drugs.json"
+        if unique_drugs_path.exists():
+            with open(unique_drugs_path, 'r') as f:
+                unique_drugs = json.load(f)
+        else:
+            unique_drugs = None
+        drug_id_mapping = {'unique_drugs': unique_drugs} if unique_drugs else None
 
     elif model_type == "XGBoost":
         model_path = exp_dir / "model.pkl"
         model = XGBoostModel.load(str(model_path))
+        
+        # Load unique drugs for one-hot encoding
+        unique_drugs_path = exp_dir / "unique_drugs.json"
+        if unique_drugs_path.exists():
+            with open(unique_drugs_path, 'r') as f:
+                unique_drugs = json.load(f)
+        else:
+            unique_drugs = None
+        drug_id_mapping = {'unique_drugs': unique_drugs} if unique_drugs else None
 
     elif model_type == "NeuralNetwork":
         if n_genes is None or n_drugs is None:
             raise ValueError("n_genes and n_drugs required for Neural Network")
         model_path = exp_dir / "model.pt"
         model = NeuralNetworkModel.load(str(model_path), n_genes=n_genes, n_drugs=n_drugs)
+        
+        # Load drug ID mapping for neural networks
+        mapping_path = exp_dir / "drug_id_mapping.json"
+        if mapping_path.exists():
+            with open(mapping_path, 'r') as f:
+                drug_id_mapping_str = json.load(f)
+                # Convert string keys back to integers
+                drug_id_mapping = {int(k): v for k, v in drug_id_mapping_str.items()}
+        else:
+            drug_id_mapping = None
 
     else:
         raise ValueError(f"Unknown model type: {model_type}")
 
-    logger.info(f"✓ Loaded {model_type} from {exp_name}")
-    return model
+    logger.info(f"✓ Loaded {model_type} ({target}) from {exp_dir.name}")
+    return model, drug_id_mapping
 
 
-def evaluate_model(model, X_test, y_test, drug_ids_test, model_name, target_name):
+def evaluate_model(model, X_test, y_test, drug_ids_test, model_name, target_name, drug_id_mapping=None):
     """Evaluate a single model."""
     logger.info(f"\nEvaluating {model_name} ({target_name})...")
 
+    # Prepare test data based on model type
+    if drug_id_mapping is not None and 'unique_drugs' in drug_id_mapping:
+        # Random Forest / XGBoost: Use one-hot encoding for drug IDs
+        unique_drugs = drug_id_mapping['unique_drugs']
+        X_genes = X_test[:, :-1]
+        drug_one_hot = create_drug_one_hot(drug_ids_test, unique_drugs)
+        X_test_prepared = np.hstack([X_genes, drug_one_hot])
+        logger.info(f"  Using one-hot encoding: {X_test_prepared.shape[1]} features (genes: {X_genes.shape[1]}, drugs: {drug_one_hot.shape[1]})")
+    elif drug_id_mapping is not None:
+        # Neural Network: Map drug IDs to 0-indexed values
+        try:
+            drug_ids_mapped = np.array([drug_id_mapping[int(d)] for d in drug_ids_test])
+            X_test_prepared = np.column_stack([X_test[:, :-1], drug_ids_mapped])
+        except KeyError as e:
+            logger.error(f"Drug ID {e} not found in mapping!")
+            logger.error(f"Mapping has {len(drug_id_mapping)} drugs")
+            logger.error(f"Test has {len(np.unique(drug_ids_test))} unique drugs")
+            logger.error(f"Missing drugs: {set(drug_ids_test) - set(drug_id_mapping.keys())}")
+            raise
+    else:
+        # Fallback: Remove drug ID feature (legacy behavior)
+        X_test_prepared = X_test[:, :-1]
+
     # Make predictions
-    y_pred = model.predict(X_test)
+    y_pred = model.predict(X_test_prepared)
 
     # Compute all metrics
     metrics = compute_all_metrics(y_test, y_pred)
@@ -178,16 +252,16 @@ def main():
 
     try:
         # Random Forest models
-        rf_ic50 = load_model("rf_ic50", "RandomForest")
-        rf_auc = load_model("rf_auc", "RandomForest")
+        rf_ic50, rf_ic50_drug_mapping = load_model("random_forest", "IC50", "RandomForest")
+        rf_auc, rf_auc_drug_mapping = load_model("random_forest", "AUC", "RandomForest")
 
         # XGBoost models
-        xgb_ic50 = load_model("xgb_ic50", "XGBoost")
-        xgb_auc = load_model("xgb_auc", "XGBoost")
+        xgb_ic50, xgb_ic50_drug_mapping = load_model("xgboost", "IC50", "XGBoost")
+        xgb_auc, xgb_auc_drug_mapping = load_model("xgboost", "AUC", "XGBoost")
 
         # Neural Network models
-        nn_ic50 = load_model("nn_ic50", "NeuralNetwork", n_genes=n_genes, n_drugs=n_drugs)
-        nn_auc = load_model("nn_auc", "NeuralNetwork", n_genes=n_genes, n_drugs=n_drugs)
+        nn_ic50, nn_ic50_drug_mapping = load_model("neural_network", "IC50", "NeuralNetwork", n_genes=n_genes, n_drugs=n_drugs)
+        nn_auc, nn_auc_drug_mapping = load_model("neural_network", "AUC", "NeuralNetwork", n_genes=n_genes, n_drugs=n_drugs)
 
         logger.info("\n✓ All models loaded successfully!")
 
@@ -210,7 +284,7 @@ def main():
     # Random Forest (IC50)
     res, pred, per_drug = evaluate_model(
         rf_ic50, X_test, y_test_ic50, drug_ids_test,
-        "RandomForest", "IC50"
+        "RandomForest", "IC50", rf_ic50_drug_mapping
     )
     ic50_results.append(res)
     ic50_predictions['RandomForest'] = pred
@@ -219,18 +293,16 @@ def main():
     # XGBoost (IC50)
     res, pred, per_drug = evaluate_model(
         xgb_ic50, X_test, y_test_ic50, drug_ids_test,
-        "XGBoost", "IC50"
+        "XGBoost", "IC50", xgb_ic50_drug_mapping
     )
     ic50_results.append(res)
     ic50_predictions['XGBoost'] = pred
     ic50_per_drug['XGBoost'] = per_drug
 
     # Neural Network (IC50)
-    # Prepare data with drug IDs for NN
-    X_test_with_drugs = np.column_stack([X_test[:, :-1], drug_ids_test])
     res, pred, per_drug = evaluate_model(
-        nn_ic50, X_test_with_drugs, y_test_ic50, drug_ids_test,
-        "NeuralNetwork", "IC50"
+        nn_ic50, X_test, y_test_ic50, drug_ids_test,
+        "NeuralNetwork", "IC50", nn_ic50_drug_mapping
     )
     ic50_results.append(res)
     ic50_predictions['NeuralNetwork'] = pred
@@ -250,7 +322,7 @@ def main():
     # Random Forest (AUC)
     res, pred, per_drug = evaluate_model(
         rf_auc, X_test, y_test_auc, drug_ids_test,
-        "RandomForest", "AUC"
+        "RandomForest", "AUC", rf_auc_drug_mapping
     )
     auc_results.append(res)
     auc_predictions['RandomForest'] = pred
@@ -259,7 +331,7 @@ def main():
     # XGBoost (AUC)
     res, pred, per_drug = evaluate_model(
         xgb_auc, X_test, y_test_auc, drug_ids_test,
-        "XGBoost", "AUC"
+        "XGBoost", "AUC", xgb_auc_drug_mapping
     )
     auc_results.append(res)
     auc_predictions['XGBoost'] = pred
@@ -267,8 +339,8 @@ def main():
 
     # Neural Network (AUC)
     res, pred, per_drug = evaluate_model(
-        nn_auc, X_test_with_drugs, y_test_auc, drug_ids_test,
-        "NeuralNetwork", "AUC"
+        nn_auc, X_test, y_test_auc, drug_ids_test,
+        "NeuralNetwork", "AUC", nn_auc_drug_mapping
     )
     auc_results.append(res)
     auc_predictions['NeuralNetwork'] = pred

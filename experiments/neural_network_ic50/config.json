@@ -1,0 +1,12 @@
+{
+  "model_type": "NeuralNetwork",
+  "target": "IC50",
+  "n_samples_train": 208896,
+  "n_samples_val": 51715,
+  "n_genes": 5000,
+  "n_drugs": 402,
+  "random_seed": 42,
+  "trained_at": "2025-12-30T12:53:30.543453",
+  "epochs_trained": 30,
+  "best_epoch": 9
+}

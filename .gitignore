@@ -50,10 +50,9 @@ archive/
 !archive/.gitkeep
 
 # Model checkpoints and experiments (can be large)
+# Note: Model files (.pt, .pkl) are now included in repo for thesis submission
 experiments/*/model.pth
-experiments/*/model.pkl
 experiments/*/*/checkpoints/*.pth
-results/predictions/*.csv
 
 # TensorBoard logs
 experiments/*/logs/
